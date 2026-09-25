@@ -1,0 +1,337 @@
+//! Parser for `lunar date -d` strings, in `date(1)` style.
+//!
+//! Accepted shapes:
+//!
+//! * keywords: `now`, `today`, `tomorrow`, `yesterday`
+//! * epoch seconds: `@1758240000`, `@-1`, `@1758240000.25`
+//! * ISO 8601: `2026-09-07`, `2026-09-07T15:30`, `20260907T1530`,
+//!   `2026-09-07T15:30:45.123456789+08:00`, `...Z`
+//! * slashes: `2026/09/07`, `09/07/2026` (month/day/year)
+//! * relative: `+3 days`, `-2 weeks`, `2 days ago`, `1 fortnight`, `90 minutes`
+//! * weekday names: `monday`, `next friday`, `last friday`
+//!
+//! Everything is anchored to a reference day (today by default), exactly like
+//! `date -d`. Only the calendar day is kept from the reference; the CLI is a
+//! calendar tool and has no time-of-day display.
+
+use crate::calendar::{CalError, MAX_YEAR, MIN_YEAR};
+use crate::civil::{self, CivilDate};
+
+/// Weekday names accepted in `-d` strings.
+const WEEKDAYS: [(&str, i32); 21] = [
+    ("sunday", 0),
+    ("sun", 0),
+    ("monday", 1),
+    ("mon", 1),
+    ("tuesday", 2),
+    ("tue", 2),
+    ("tues", 2),
+    ("wednesday", 3),
+    ("wed", 3),
+    ("thursday", 4),
+    ("thu", 4),
+    ("thur", 4),
+    ("thurs", 4),
+    ("friday", 5),
+    ("fri", 5),
+    ("saturday", 6),
+    ("sat", 6),
+    ("星期日", 0),
+    ("星期天", 0),
+    ("礼拜天", 0),
+    ("周一", 1),
+];
+
+/// Malformed-input error, carrying the offending text.
+fn invalid(input: &str) -> CalError {
+    CalError::UnparsableDate { input: input.to_string() }
+}
+
+/// Parses `input` relative to `reference`.
+pub fn parse(input: &str, reference: CivilDate) -> Result<CivilDate, CalError> {
+    let text = input.trim();
+    if text.is_empty() {
+        return Err(invalid(input));
+    }
+    let lower = text.to_ascii_lowercase();
+
+    if let Some(result) = parse_keyword(&lower, reference)? {
+        return Ok(result);
+    }
+    if let Some(rest) = lower.strip_prefix('@') {
+        return parse_epoch(rest, input);
+    }
+    if let Some(result) = parse_absolute(text, &lower, reference)? {
+        return Ok(result);
+    }
+    if let Some(result) = parse_weekday(&lower, reference)? {
+        return Ok(result);
+    }
+    parse_relative(&lower, reference, input)
+}
+
+/// `now`, `today`, `tomorrow`, `yesterday`.
+fn parse_keyword(lower: &str, reference: CivilDate) -> Result<Option<CivilDate>, CalError> {
+    let delta = match lower {
+        "now" | "today" => 0,
+        "tomorrow" => 1,
+        "yesterday" => -1,
+        _ => return Ok(None),
+    };
+    Ok(Some(reference.add_days(delta)))
+}
+
+/// `@seconds[.fraction]`, truncated towards the epoch day.
+fn parse_epoch(rest: &str, input: &str) -> Result<CivilDate, CalError> {
+    let whole = rest.split('.').next().unwrap_or(rest);
+    let seconds: i64 = whole.parse().map_err(|_| invalid(input))?;
+    let day = seconds.div_euclid(civil::SECS_PER_DAY);
+    let date = CivilDate::from_epoch_day(day);
+    validate(date, input)
+}
+
+/// Absolute dates: ISO 8601, slash forms, bare year, and a trailing time of
+/// day which only matters for zone shifts.
+fn parse_absolute(text: &str, lower: &str, reference: CivilDate) -> Result<Option<CivilDate>, CalError> {
+    let bytes = text.as_bytes();
+
+    let input = text;
+    // YYYYMMDD, optionally followed by a time part: 20260907T1530
+    if bytes.len() >= 8 && bytes[..8].iter().all(u8::is_ascii_digit) {
+        let date = CivilDate::new(
+            number(&text[0..4], input)?,
+            number(&text[4..6], input)?,
+            number(&text[6..8], input)?,
+        );
+        let rest = lower.strip_prefix(&lower[..8]);
+        return finish(date, rest.unwrap_or(""), input).map(Some);
+    }
+
+    // A dashed date whose first field is a one- to three-digit year, e.g.
+    // `1-01-01` or `999-12-31`.
+    if bytes.len() >= 6 && bytes.iter().all(|b| b.is_ascii_digit() || *b == b'-' || *b == b'/') {
+        let first = bytes.iter().take_while(|b| b.is_ascii_digit()).count();
+        if (1..=3).contains(&first) && (bytes[first] == b'-' || bytes[first] == b'/') {
+            let sep = bytes[first];
+            let fields: Vec<&str> = text.split(sep as char).collect();
+            if fields.len() == 3 {
+                let date = CivilDate::new(number(fields[0], input)?, number(fields[1], input)?, number(fields[2], input)?);
+                return finish(date, "", input).map(Some);
+            }
+        }
+    }
+
+    // YYYY-MM-DD / YYYY/MM/DD, with the same separator in both positions.
+    if bytes.len() >= 10 && (bytes[4] == b'-' || bytes[4] == b'/') && bytes[7] == bytes[4] {
+        let date = CivilDate::new(
+            number(&text[0..4], input)?,
+            number(&text[5..7], input)?,
+            number(&text[8..10], input)?,
+        );
+        return finish(date, &lower[10..], input).map(Some);
+    }
+
+    // MM/DD/YYYY, the US order used by date(1).
+    if bytes.len() >= 10 && bytes[2] == b'/' && bytes[5] == b'/' {
+        let date = CivilDate::new(
+            number(&text[6..10], input)?,
+            number(&text[0..2], input)?,
+            number(&text[3..5], input)?,
+        );
+        return finish(date, &lower[10..], input).map(Some);
+    }
+
+    // A bare year keeps today's month and day.
+    if bytes.len() == 4 && bytes.iter().all(u8::is_ascii_digit) {
+        let date = CivilDate::new(number(text, input)?, reference.month, reference.day);
+        return validate(date, input).map(Some);
+    }
+
+    // A bare time of day applies to today: 15:30, 15:30:45
+    if let Some((_, _, _)) = parse_clock(text) {
+        return Ok(Some(reference));
+    }
+
+    let _ = text;
+    Ok(None)
+}
+
+/// Applies an optional trailing time/zone to an absolute date.
+fn finish(date: CivilDate, suffix: &str, input: &str) -> Result<CivilDate, CalError> {
+    let suffix = suffix.trim_start_matches(['t', ' ']);
+    if suffix.is_empty() {
+        return validate(date, input);
+    }
+    let (clock, zone) = split_zone(suffix);
+    let time = parse_clock(clock).ok_or_else(|| invalid(input))?;
+    match zone {
+        // A zone only matters when it shifts the day; keep the reference's
+        // day when it does not, mirroring `date -d "… 23:00 UTC"` in UTC.
+        Some(zone) => shift_by_zone(date, time, zone, input),
+        None => validate(date, input),
+    }
+}
+
+/// Reinterprets `date time` in `zone` and returns the local calendar day.
+fn shift_by_zone(date: CivilDate, (hour, minute, _second): (i32, i32, i32), zone: &str, input: &str) -> Result<CivilDate, CalError> {
+    let offset = zone_offset(zone).ok_or_else(|| invalid(input))?;
+    let seconds = date.epoch_day() * civil::SECS_PER_DAY + i64::from(hour) * 3600 + i64::from(minute) * 60 - offset;
+    validate(CivilDate::from_epoch_day(seconds.div_euclid(civil::SECS_PER_DAY)), input)
+}
+
+/// Splits a trailing zone designator off a time string.
+fn split_zone(rest: &str) -> (&str, Option<&str>) {
+    for marker in ["utc", "gmt", "z"] {
+        if let Some(stripped) = rest.strip_suffix(marker) {
+            return (stripped.trim_end(), Some("UTC"));
+        }
+    }
+    let bytes = rest.as_bytes();
+    // `+08:00` / `-0500`: the sign always follows a digit or a colon.
+    for (index, byte) in bytes.iter().enumerate().skip(1) {
+        if (*byte == b'+' || *byte == b'-') && (bytes[index - 1].is_ascii_digit() || bytes[index - 1] == b':') {
+            return (rest[..index].trim_end(), Some(&rest[index - 1..]));
+        }
+    }
+    (rest, None)
+}
+
+/// Offset of a `UTC` or `+HH[[:]MM]` designator. POSIX signs are inverted:
+/// `+0800` means 8 hours *behind* UTC.
+fn zone_offset(zone: &str) -> Option<i64> {
+    if zone.eq_ignore_ascii_case("utc") || zone.eq_ignore_ascii_case("gmt") {
+        return Some(0);
+    }
+    let bytes = zone.as_bytes();
+    let sign = match bytes.first()? {
+        b'+' => -1,
+        b'-' => 1,
+        _ => return None,
+    };
+    let digits: String = zone[1..].chars().filter(char::is_ascii_digit).collect();
+    let (hours, minutes) = match digits.len() {
+        2 => (digits.parse::<i64>().ok()?, 0),
+        4 => (digits[0..2].parse::<i64>().ok()?, digits[2..4].parse::<i64>().ok()?),
+        _ => return None,
+    };
+    Some(sign * (hours * 3600 + minutes * 60))
+}
+
+/// Parses `hh`, `hh:mm` and `hh:mm:ss`.
+fn parse_clock(text: &str) -> Option<(i32, i32, i32)> {
+    if text.is_empty() {
+        return None;
+    }
+    let mut parts = text.split(':');
+    let hour: i32 = parts.next()?.parse().ok()?;
+    let minute: i32 = match parts.next() {
+        Some(value) => value.parse().ok()?,
+        None => 0,
+    };
+    let second: i32 = match parts.next() {
+        Some(value) => value.parse().ok()?,
+        None => 0,
+    };
+    if !(0..=23).contains(&hour) || !(0..=59).contains(&minute) || !(0..=59).contains(&second) {
+        return None;
+    }
+    Some((hour, minute, second))
+}
+
+/// `monday`, `next friday`, `last sun`.
+fn parse_weekday(lower: &str, reference: CivilDate) -> Result<Option<CivilDate>, CalError> {
+    let (mode, name) = if let Some(rest) = lower.strip_prefix("next ") {
+        (1, rest)
+    } else if let Some(rest) = lower.strip_prefix("last ") {
+        (-1, rest)
+    } else {
+        (0, lower)
+    };
+    let Some((_, target)) = WEEKDAYS.iter().find(|(candidate, _)| *candidate == name) else {
+        return Ok(None);
+    };
+    let mut delta = target - reference.weekday();
+    match mode {
+        1 if delta <= 0 => delta += 7,
+        -1 if delta >= 0 => delta -= 7,
+        0 if delta < 0 => delta += 7,
+        _ => {}
+    }
+    Ok(Some(reference.add_days(i64::from(delta))))
+}
+
+/// `+3 days`, `-2 weeks`, `2 days ago`, `1 fortnight`, `90 minutes`, `next month`.
+fn parse_relative(lower: &str, reference: CivilDate, input: &str) -> Result<CivilDate, CalError> {
+    let mut text = lower.trim().to_string();
+    let mut sign = 1i32;
+    if let Some(rest) = text.strip_prefix('+') {
+        text = rest.trim().to_string();
+    } else if let Some(rest) = text.strip_prefix('-') {
+        sign = -1;
+        text = rest.trim().to_string();
+    }
+    if let Some(rest) = text.strip_suffix(" ago") {
+        sign = -sign;
+        text = rest.trim().to_string();
+    }
+
+    // A bare unit or a bare `next`/`last` month or year moves that period.
+    let tokens: Vec<&str> = text.split_whitespace().collect();
+    if tokens.is_empty() {
+        return Err(invalid(input));
+    }
+
+    let mut date = reference;
+    let mut index = 0;
+    let mut moved = false;
+    while index < tokens.len() {
+        let (unit, count) = match tokens[index].parse::<i32>() {
+            Ok(value) => {
+                let unit = *tokens.get(index + 1).ok_or_else(|| invalid(input))?;
+                index += 2;
+                (unit, value * sign)
+            }
+            Err(_) => {
+                let unit = tokens[index];
+                index += 1;
+                (unit, sign)
+            }
+        };
+        date = apply_unit(date, unit, count, input)?;
+        moved = true;
+    }
+    if !moved {
+        return Err(invalid(input));
+    }
+    validate(date, input)
+}
+
+/// Applies one relative unit.
+fn apply_unit(date: CivilDate, unit: &str, count: i32, input: &str) -> Result<CivilDate, CalError> {
+    let unit = unit.trim_end_matches(['.', ',']);
+    match unit {
+        "fortnight" | "fortnights" => Ok(date.add_days(i64::from(count) * 14)),
+        "day" | "days" => Ok(date.add_days(i64::from(count))),
+        "week" | "weeks" => Ok(date.add_days(i64::from(count) * 7)),
+        "month" | "months" => Ok(date.add_months(count)),
+        "year" | "years" => Ok(date.add_years(count)),
+        "sec" | "secs" | "second" | "seconds" | "min" | "mins" | "minute" | "minutes" | "hour" | "hours" => Ok(date),
+        _ => Err(invalid(input)),
+    }
+}
+
+/// Parses a decimal number.
+fn number(text: &str, input: &str) -> Result<i32, CalError> {
+    text.parse().map_err(|_| invalid(input))
+}
+
+/// Rejects years outside the supported window and impossible dates.
+fn validate(date: CivilDate, input: &str) -> Result<CivilDate, CalError> {
+    if !(MIN_YEAR..=MAX_YEAR).contains(&date.year) {
+        return Err(CalError::YearOutOfRange { year: date.year, min: MIN_YEAR, max: MAX_YEAR });
+    }
+    if !(1..=12).contains(&date.month) || date.day < 1 || date.day > date.days_in_month() {
+        return Err(invalid(input));
+    }
+    Ok(date)
+}

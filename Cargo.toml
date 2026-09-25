@@ -1,0 +1,19 @@
+[package]
+name = "lunar"
+version = "0.1.0"
+edition = "2024"
+description = "Chinese lunisolar calendar CLI: `lunar date` prints a day profile, `lunar cal` renders month/year grids with lunar days, solar terms and festivals."
+license = "MIT"
+readme = "README.md"
+keywords = ["calendar", "chinese", "lunar", "cli", "date", "nongli"]
+categories = ["command-line-utilities", "date-and-time"]
+
+[dependencies]
+clap = { version = "4.6.7", features = ["derive"] }
+lunar-rs = { version = "1.0.0-rc1", features = ["i18n"] }
+tz = { package = "tz-rs", version = "0.7.3" }
+
+[profile.release]
+lto = true
+codegen-units = 1
+strip = true
