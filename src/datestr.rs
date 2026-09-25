@@ -44,7 +44,9 @@ const WEEKDAYS: [(&str, i32); 21] = [
 
 /// Malformed-input error, carrying the offending text.
 fn invalid(input: &str) -> CalError {
-    CalError::UnparsableDate { input: input.to_string() }
+    CalError::UnparsableDate {
+        input: input.to_string(),
+    }
 }
 
 /// Parses `input` relative to `reference`.
@@ -92,7 +94,11 @@ fn parse_epoch(rest: &str, input: &str) -> Result<CivilDate, CalError> {
 
 /// Absolute dates: ISO 8601, slash forms, bare year, and a trailing time of
 /// day which only matters for zone shifts.
-fn parse_absolute(text: &str, lower: &str, reference: CivilDate) -> Result<Option<CivilDate>, CalError> {
+fn parse_absolute(
+    text: &str,
+    lower: &str,
+    reference: CivilDate,
+) -> Result<Option<CivilDate>, CalError> {
     let bytes = text.as_bytes();
 
     let input = text;
@@ -109,13 +115,21 @@ fn parse_absolute(text: &str, lower: &str, reference: CivilDate) -> Result<Optio
 
     // A dashed date whose first field is a one- to three-digit year, e.g.
     // `1-01-01` or `999-12-31`.
-    if bytes.len() >= 6 && bytes.iter().all(|b| b.is_ascii_digit() || *b == b'-' || *b == b'/') {
+    if bytes.len() >= 6
+        && bytes
+            .iter()
+            .all(|b| b.is_ascii_digit() || *b == b'-' || *b == b'/')
+    {
         let first = bytes.iter().take_while(|b| b.is_ascii_digit()).count();
         if (1..=3).contains(&first) && (bytes[first] == b'-' || bytes[first] == b'/') {
             let sep = bytes[first];
             let fields: Vec<&str> = text.split(sep as char).collect();
             if fields.len() == 3 {
-                let date = CivilDate::new(number(fields[0], input)?, number(fields[1], input)?, number(fields[2], input)?);
+                let date = CivilDate::new(
+                    number(fields[0], input)?,
+                    number(fields[1], input)?,
+                    number(fields[2], input)?,
+                );
                 return finish(date, "", input).map(Some);
             }
         }
@@ -173,10 +187,20 @@ fn finish(date: CivilDate, suffix: &str, input: &str) -> Result<CivilDate, CalEr
 }
 
 /// Reinterprets `date time` in `zone` and returns the local calendar day.
-fn shift_by_zone(date: CivilDate, (hour, minute, _second): (i32, i32, i32), zone: &str, input: &str) -> Result<CivilDate, CalError> {
+fn shift_by_zone(
+    date: CivilDate,
+    (hour, minute, _second): (i32, i32, i32),
+    zone: &str,
+    input: &str,
+) -> Result<CivilDate, CalError> {
     let offset = zone_offset(zone).ok_or_else(|| invalid(input))?;
-    let seconds = date.epoch_day() * civil::SECS_PER_DAY + i64::from(hour) * 3600 + i64::from(minute) * 60 - offset;
-    validate(CivilDate::from_epoch_day(seconds.div_euclid(civil::SECS_PER_DAY)), input)
+    let seconds =
+        date.epoch_day() * civil::SECS_PER_DAY + i64::from(hour) * 3600 + i64::from(minute) * 60
+            - offset;
+    validate(
+        CivilDate::from_epoch_day(seconds.div_euclid(civil::SECS_PER_DAY)),
+        input,
+    )
 }
 
 /// Splits a trailing zone designator off a time string.
@@ -189,7 +213,9 @@ fn split_zone(rest: &str) -> (&str, Option<&str>) {
     let bytes = rest.as_bytes();
     // `+08:00` / `-0500`: the sign always follows a digit or a colon.
     for (index, byte) in bytes.iter().enumerate().skip(1) {
-        if (*byte == b'+' || *byte == b'-') && (bytes[index - 1].is_ascii_digit() || bytes[index - 1] == b':') {
+        if (*byte == b'+' || *byte == b'-')
+            && (bytes[index - 1].is_ascii_digit() || bytes[index - 1] == b':')
+        {
             return (rest[..index].trim_end(), Some(&rest[index - 1..]));
         }
     }
@@ -211,7 +237,10 @@ fn zone_offset(zone: &str) -> Option<i64> {
     let digits: String = zone[1..].chars().filter(char::is_ascii_digit).collect();
     let (hours, minutes) = match digits.len() {
         2 => (digits.parse::<i64>().ok()?, 0),
-        4 => (digits[0..2].parse::<i64>().ok()?, digits[2..4].parse::<i64>().ok()?),
+        4 => (
+            digits[0..2].parse::<i64>().ok()?,
+            digits[2..4].parse::<i64>().ok()?,
+        ),
         _ => return None,
     };
     Some(sign * (hours * 3600 + minutes * 60))
@@ -315,7 +344,8 @@ fn apply_unit(date: CivilDate, unit: &str, count: i32, input: &str) -> Result<Ci
         "week" | "weeks" => Ok(date.add_days(i64::from(count) * 7)),
         "month" | "months" => Ok(date.add_months(count)),
         "year" | "years" => Ok(date.add_years(count)),
-        "sec" | "secs" | "second" | "seconds" | "min" | "mins" | "minute" | "minutes" | "hour" | "hours" => Ok(date),
+        "sec" | "secs" | "second" | "seconds" | "min" | "mins" | "minute" | "minutes" | "hour"
+        | "hours" => Ok(date),
         _ => Err(invalid(input)),
     }
 }
@@ -328,7 +358,11 @@ fn number(text: &str, input: &str) -> Result<i32, CalError> {
 /// Rejects years outside the supported window and impossible dates.
 fn validate(date: CivilDate, input: &str) -> Result<CivilDate, CalError> {
     if !(MIN_YEAR..=MAX_YEAR).contains(&date.year) {
-        return Err(CalError::YearOutOfRange { year: date.year, min: MIN_YEAR, max: MAX_YEAR });
+        return Err(CalError::YearOutOfRange {
+            year: date.year,
+            min: MIN_YEAR,
+            max: MAX_YEAR,
+        });
     }
     if !(1..=12).contains(&date.month) || date.day < 1 || date.day > date.days_in_month() {
         return Err(invalid(input));

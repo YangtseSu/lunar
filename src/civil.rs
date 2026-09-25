@@ -7,8 +7,8 @@
 //! `Solar` rejects 1582-10-05..=1582-10-14), plus calendar stepping for the
 //! `-d` parser.
 
-use lunar_rs::solar_util;
 use lunar_rs::Solar;
+use lunar_rs::solar_util;
 
 use crate::calendar::{self, CalError};
 
@@ -94,13 +94,21 @@ impl CivilDate {
         let total = i64::from(self.year) * 12 + i64::from(self.month - 1) + i64::from(delta);
         let year = (total.div_euclid(12)) as i32;
         let month = (total.rem_euclid(12) as i32) + 1;
-        Self { year, month, day: self.day.min(solar_util::days_of_month(year, month)) }
+        Self {
+            year,
+            month,
+            day: self.day.min(solar_util::days_of_month(year, month)),
+        }
     }
 
     /// This date plus `delta` years, clamping 2/29 to 2/28 in common years.
     pub fn add_years(self, delta: i32) -> Self {
         let year = self.year + delta;
-        Self { year, month: self.month, day: self.day.min(solar_util::days_of_month(year, self.month)) }
+        Self {
+            year,
+            month: self.month,
+            day: self.day.min(solar_util::days_of_month(year, self.month)),
+        }
     }
 
     /// Converts to `lunar-rs`' [`Solar`], rejecting out-of-range years,

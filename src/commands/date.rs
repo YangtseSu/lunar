@@ -1,6 +1,6 @@
 //! `lunar date` — one day's Chinese almanac profile.
 //!
-//! Without `-f` it prints the five-line profile documented for `date_nongli`:
+//! Without `-f` it prints the standard five-line day profile:
 //!
 //! ```text
 //! 公历：2026年9月7日 星期一
@@ -63,21 +63,41 @@ fn resolve(args: &DateArgs, today: CivilDate) -> Result<CivilDate, CalError> {
             date.to_solar()?;
             Ok(date)
         }
-        _ => Err(CalError::UnparsableDate { input: args.positional.join(" ") }),
+        _ => Err(CalError::UnparsableDate {
+            input: args.positional.join(" "),
+        }),
     }
 }
 
 /// Parses a positional integer.
 fn number(text: &str) -> Result<i32, CalError> {
-    text.parse().map_err(|_| CalError::UnparsableDate { input: text.to_string() })
+    text.parse().map_err(|_| CalError::UnparsableDate {
+        input: text.to_string(),
+    })
 }
 
 /// The default five-line profile.
 fn write_profile(solar: Solar, out: &mut String) {
     let lunar = solar.lunar();
-    out.push_str(&format!("公历：{}年{}月{}日 星期{}\n", solar.year(), solar.month(), solar.day(), calendar::weekday_name(solar.week())));
-    out.push_str(&format!("农历：{}年{}{}\n", calendar::year_gan_zhi(&lunar), calendar::lunar_month_name(lunar.month()), calendar::lunar_day_name(lunar.day())));
-    out.push_str(&format!("干支：{}年 {}月 {}日\n", calendar::year_gan_zhi(&lunar), calendar::month_gan_zhi(&lunar), calendar::day_gan_zhi(&lunar)));
+    out.push_str(&format!(
+        "公历：{}年{}月{}日 星期{}\n",
+        solar.year(),
+        solar.month(),
+        solar.day(),
+        calendar::weekday_name(solar.week())
+    ));
+    out.push_str(&format!(
+        "农历：{}年{}{}\n",
+        calendar::year_gan_zhi(&lunar),
+        calendar::lunar_month_name(lunar.month()),
+        calendar::lunar_day_name(lunar.day())
+    ));
+    out.push_str(&format!(
+        "干支：{}年 {}月 {}日\n",
+        calendar::year_gan_zhi(&lunar),
+        calendar::month_gan_zhi(&lunar),
+        calendar::day_gan_zhi(&lunar)
+    ));
     out.push_str(&format!("生肖：{}\n", calendar::sheng_xiao(&lunar)));
     if let Some(term) = calendar::jie_qi(&lunar) {
         out.push_str(&format!("节气：{term}\n"));

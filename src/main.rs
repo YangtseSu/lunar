@@ -9,8 +9,8 @@
 //!
 //! Supported years are 1–9999, the window `lunar-rs` can serve.
 
-mod calgrid;
 mod calendar;
+mod calgrid;
 mod cell;
 mod civil;
 mod commands;
@@ -26,7 +26,7 @@ use clap::{ArgAction, Parser, Subcommand};
 use crate::calendar::{MAX_YEAR, MIN_YEAR};
 use crate::commands::{cal, date};
 
-/// Token help, identical to `date_nongli --help-format`.
+/// Token help, printed by `lunar date --help-format`.
 const FORMAT_HELP: &str = "\
 格式令牌(在 -f/--format 中):
 %Y 公历年   %m 公历月   %d 公历日   %A 星期几单字(一~日)
@@ -127,14 +127,39 @@ fn main() -> ExitCode {
 
     let mut out = String::new();
     let result = match &cli.command {
-        Command::Date { date, format, help_format, positional } => {
+        Command::Date {
+            date,
+            format,
+            help_format,
+            positional,
+        } => {
             if *help_format {
                 println!("{FORMAT_HELP}");
                 return ExitCode::SUCCESS;
             }
-            date::run(&date::DateArgs { date: date.clone(), format: format.clone(), positional: positional.clone() }, today, &mut out)
+            date::run(
+                &date::DateArgs {
+                    date: date.clone(),
+                    format: format.clone(),
+                    positional: positional.clone(),
+                },
+                today,
+                &mut out,
+            )
         }
-        Command::Cal { lunar, leap, sunday, monday, year, three, months, number, no_month_name, no_festival, positional } => {
+        Command::Cal {
+            lunar,
+            leap,
+            sunday,
+            monday,
+            year,
+            three,
+            months,
+            number,
+            no_month_name,
+            no_festival,
+            positional,
+        } => {
             // `-m` is the default; `-s` is what actually changes the first column.
             let _ = monday;
             cal::run(

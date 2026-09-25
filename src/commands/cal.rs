@@ -1,6 +1,6 @@
 //! `lunar cal` — month and year grids with Chinese lunar content.
 //!
-//! Mirrors the documented `cal_nongli` surface:
+//! The command surface:
 //!
 //! * no arguments → the current civil month (or the current lunar month with `-L`)
 //! * one argument → a whole year
@@ -14,8 +14,8 @@ use std::sync::Arc;
 
 use lunar_rs::{Lunar, LunarMonth, LunarYear};
 
-use crate::calgrid::{self, Grid};
 use crate::calendar::{self, CalError, MAX_YEAR};
+use crate::calgrid::{self, Grid};
 use crate::cell::CellStyle;
 use crate::civil::CivilDate;
 
@@ -62,12 +62,21 @@ pub fn run(args: &CalArgs, today: CivilDate, out: &mut String) -> Result<(), Cal
 }
 
 /// Civil-month view: `cal`, `cal 2026`, `cal 2026 9`, `-y`, `-3`, `-n N`.
-fn run_civil(args: &CalArgs, today: CivilDate, style: CellStyle, week_start: i32, out: &mut String) -> Result<(), CalError> {
+fn run_civil(
+    args: &CalArgs,
+    today: CivilDate,
+    style: CellStyle,
+    week_start: i32,
+    out: &mut String,
+) -> Result<(), CalError> {
     let (year, month) = match args.positional.len() {
         0 => (today.year, today.month),
         // A bare year means the whole year, so it starts in January.
         1 => (positional_int(&args.positional[0])?, 1),
-        2 => (positional_int(&args.positional[0])?, positional_int(&args.positional[1])?),
+        2 => (
+            positional_int(&args.positional[0])?,
+            positional_int(&args.positional[1])?,
+        ),
         _ => return Err(CalError::MonthOutOfRange { month: -1 }),
     };
     calendar::check_year(year)?;
@@ -75,16 +84,30 @@ fn run_civil(args: &CalArgs, today: CivilDate, style: CellStyle, week_start: i32
 
     // A single positional is a year, so it always means the whole year; `-n`,
     // `-3` and `-y` can extend a month request.
-    let count = if args.positional.len() == 1 && args.months.is_none() && !args.three { 12 } else { month_count(args) };
+    let count = if args.positional.len() == 1 && args.months.is_none() && !args.three {
+        12
+    } else {
+        month_count(args)
+    };
     let mut cursor = CivilDate::new(year, month, 1);
     for index in 0..count {
         if index > 0 {
             out.push('\n');
         }
         if cursor.year > MAX_YEAR {
-            return Err(CalError::YearOutOfRange { year: cursor.year, min: calendar::MIN_YEAR, max: MAX_YEAR });
+            return Err(CalError::YearOutOfRange {
+                year: cursor.year,
+                min: calendar::MIN_YEAR,
+                max: MAX_YEAR,
+            });
         }
-        let grid = Grid::civil_blanked(calgrid::civil_title(cursor.year, cursor.month), cursor.year, cursor.month, week_start, style)?;
+        let grid = Grid::civil_blanked(
+            calgrid::civil_title(cursor.year, cursor.month),
+            cursor.year,
+            cursor.month,
+            week_start,
+            style,
+        )?;
         grid.render(week_start, out);
         cursor = cursor.add_months(1);
     }
@@ -92,16 +115,29 @@ fn run_civil(args: &CalArgs, today: CivilDate, style: CellStyle, week_start: i32
 }
 
 /// Lunar-month view: `cal -L`, `cal -L 2026`, `cal -L 2026 7`, `-L -R`.
-fn run_lunar(args: &CalArgs, today: CivilDate, style: CellStyle, week_start: i32, out: &mut String) -> Result<(), CalError> {
+fn run_lunar(
+    args: &CalArgs,
+    today: CivilDate,
+    style: CellStyle,
+    week_start: i32,
+    out: &mut String,
+) -> Result<(), CalError> {
     let current = today.to_solar()?.lunar();
     let (year, month) = match args.positional.len() {
         0 | 1 => {
-            let year = if args.positional.is_empty() { current.year() } else { positional_int(&args.positional[0])? };
+            let year = if args.positional.is_empty() {
+                current.year()
+            } else {
+                positional_int(&args.positional[0])?
+            };
             // A bare year shows the whole lunar year unless a month is implied.
             let month = if args.year { 1 } else { current.month() };
             (year, month)
         }
-        2 => (positional_int(&args.positional[0])?, positional_int(&args.positional[1])?),
+        2 => (
+            positional_int(&args.positional[0])?,
+            positional_int(&args.positional[1])?,
+        ),
         _ => return Err(CalError::MonthOutOfRange { month: -1 }),
     };
     let months = calendar::lunar_year(year)?;
@@ -122,7 +158,12 @@ fn run_lunar(args: &CalArgs, today: CivilDate, style: CellStyle, week_start: i32
 /// `cal -L 2026` walks the whole lunar year, so it picks up the leap month on
 /// its own; an explicit `年 月` prints just that month, and only prints the
 /// leap month when `-R` is given.
-fn select_lunar_months(year: &Arc<LunarYear>, year_number: i32, month: i32, args: &CalArgs) -> Result<Vec<LunarMonth>, CalError> {
+fn select_lunar_months(
+    year: &Arc<LunarYear>,
+    year_number: i32,
+    month: i32,
+    args: &CalArgs,
+) -> Result<Vec<LunarMonth>, CalError> {
     let all = calendar::lunar_year_months(year);
 
     if args.positional.len() >= 2 {
@@ -130,7 +171,10 @@ fn select_lunar_months(year: &Arc<LunarYear>, year_number: i32, month: i32, args
         return match calendar::lunar_year_month(year, wanted) {
             Some(found) => Ok(vec![found]),
             None if args.leap => Err(CalError::NoLeapMonth { year: year_number }),
-            None => Err(CalError::NoSuchLunarMonth { year: year_number, month }),
+            None => Err(CalError::NoSuchLunarMonth {
+                year: year_number,
+                month,
+            }),
         };
     }
 
@@ -141,16 +185,26 @@ fn select_lunar_months(year: &Arc<LunarYear>, year_number: i32, month: i32, args
     }
 
     // A single month, defaulting to the one the reference day falls in.
-    let anchor = all.iter().position(|candidate| candidate.month() == month).unwrap_or(0);
+    let anchor = all
+        .iter()
+        .position(|candidate| candidate.month() == month)
+        .unwrap_or(0);
     let span = month_count(args) as usize;
-    let start = if span > 1 { anchor.saturating_sub(span / 2) } else { anchor };
+    let start = if span > 1 {
+        anchor.saturating_sub(span / 2)
+    } else {
+        anchor
+    };
     Ok(all.into_iter().skip(start).take(span).collect())
 }
 
 /// `农历 丙午年 七月`, with `闰` for a leap month.
 fn lunar_month_title(month: &LunarMonth) -> String {
     let first = month.get_first_day();
-    let gan_zhi = first.as_ref().map(Lunar::year_in_gan_zhi).unwrap_or_default();
+    let gan_zhi = first
+        .as_ref()
+        .map(Lunar::year_in_gan_zhi)
+        .unwrap_or_default();
     calgrid::lunar_title(&gan_zhi, &calendar::lunar_month_name(month.month()))
 }
 
@@ -171,5 +225,6 @@ fn month_count(args: &CalArgs) -> i32 {
 
 /// Parses a positional integer.
 fn positional_int(text: &str) -> Result<i32, CalError> {
-    text.parse().map_err(|_| CalError::MonthOutOfRange { month: -1 })
+    text.parse()
+        .map_err(|_| CalError::MonthOutOfRange { month: -1 })
 }

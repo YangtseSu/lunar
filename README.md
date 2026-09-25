@@ -1,7 +1,6 @@
 # lunar
 
-A Chinese lunisolar calendar command line tool, in the shape of
-[`cal_nongli`](https://crates.io/crates/cal_nongli):
+A Chinese lunisolar calendar command line tool:
 
 - `lunar date` — one day's almanac profile (公历 / 星期 / 农历 / 干支 / 生肖 / 节气)
   plus a custom format mode;

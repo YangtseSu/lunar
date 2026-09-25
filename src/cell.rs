@@ -1,6 +1,6 @@
 //! The text a `cal` cell shows under (or over) a day number.
 //!
-//! Priority, as documented for `cal_nongli`:
+//! Cell priority:
 //!
 //! ```text
 //! 格子优先级：节日 > 初一显示月份名 > 节气 > 农历日
@@ -26,22 +26,31 @@ pub struct CellStyle {
 
 impl Default for CellStyle {
     fn default() -> Self {
-        Self { number: false, month_name: true, festival: true }
+        Self {
+            number: false,
+            month_name: true,
+            festival: true,
+        }
     }
 }
 
 /// Label of the lunar day itself, honouring `--number`.
 pub fn day_label(lunar: &Lunar, style: CellStyle) -> String {
-    if style.number { lunar.day().to_string() } else { calendar::lunar_day_name(lunar.day()).to_string() }
+    if style.number {
+        lunar.day().to_string()
+    } else {
+        calendar::lunar_day_name(lunar.day()).to_string()
+    }
 }
 
 /// The full cell content: festival, else month name on 初一, else solar term,
 /// else the lunar day.
 pub fn content(lunar: &Lunar, style: CellStyle) -> String {
     if style.festival
-        && let Some(name) = calendar::traditional_festivals(lunar) {
-            return name.to_string();
-        }
+        && let Some(name) = calendar::traditional_festivals(lunar)
+    {
+        return name.to_string();
+    }
     // The lunar new year day keeps its festival label; every other 初一 shows
     // the month name instead of the day number.
     if style.month_name && lunar.day() == 1 && lunar.month() != 1 {

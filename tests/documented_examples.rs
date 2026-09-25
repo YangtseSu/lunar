@@ -15,15 +15,27 @@ fn binary() -> Command {
 /// Runs `lunar <args…>` and returns stdout, trimmed of the trailing newline.
 fn run(args: &[&str]) -> String {
     let output = binary().args(args).output().expect("lunar runs");
-    assert!(output.status.success(), "lunar {args:?} failed: {}", String::from_utf8_lossy(&output.stderr));
-    String::from_utf8(output.stdout).expect("utf-8 stdout").trim_end_matches('\n').to_string()
+    assert!(
+        output.status.success(),
+        "lunar {args:?} failed: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    String::from_utf8(output.stdout)
+        .expect("utf-8 stdout")
+        .trim_end_matches('\n')
+        .to_string()
 }
 
 /// Runs `lunar <args…>`, expecting failure, and returns stderr.
 fn run_failing(args: &[&str]) -> String {
     let output = binary().args(args).output().expect("lunar runs");
-    assert!(!output.status.success(), "lunar {args:?} unexpectedly succeeded");
-    String::from_utf8_lossy(&output.stderr).trim_end().to_string()
+    assert!(
+        !output.status.success(),
+        "lunar {args:?} unexpectedly succeeded"
+    );
+    String::from_utf8_lossy(&output.stderr)
+        .trim_end()
+        .to_string()
 }
 
 #[test]
@@ -44,7 +56,10 @@ fn date_profile_shows_leap_month() {
 
 #[test]
 fn date_accepts_positional_year_month_day() {
-    assert_eq!(run(&["date", "2026", "2", "17"]), run(&["date", "-d", "2026-02-17"]));
+    assert_eq!(
+        run(&["date", "2026", "2", "17"]),
+        run(&["date", "-d", "2026-02-17"])
+    );
     assert_eq!(
         run(&["date", "2026", "2", "17"]),
         "公历：2026年2月17日 星期二\n农历：丙午年正月初一\n干支：丙午年 庚寅月 壬戌日\n生肖：马"
@@ -58,10 +73,28 @@ fn date_omits_the_term_line_when_there_is_no_solar_term() {
 
 #[test]
 fn date_format_tokens_match_documented_examples() {
-    assert_eq!(run(&["date", "-f", "%G年%M%N，星期%A", "-d", "2026-09-07"]), "丙午年七月廿六，星期一");
-    assert_eq!(run(&["date", "-f", "%G年%M%N，星期%A\\n干支日：%D", "-d", "2026-09-07"]), "丙午年七月廿六，星期一\n干支日：甲申");
     assert_eq!(
-        run(&["date", "-f", "周%A 农历%M%N（日序 %n），生肖%S，节气：%Q", "-d", "2026-09-07"]),
+        run(&["date", "-f", "%G年%M%N，星期%A", "-d", "2026-09-07"]),
+        "丙午年七月廿六，星期一"
+    );
+    assert_eq!(
+        run(&[
+            "date",
+            "-f",
+            "%G年%M%N，星期%A\\n干支日：%D",
+            "-d",
+            "2026-09-07"
+        ]),
+        "丙午年七月廿六，星期一\n干支日：甲申"
+    );
+    assert_eq!(
+        run(&[
+            "date",
+            "-f",
+            "周%A 农历%M%N（日序 %n），生肖%S，节气：%Q",
+            "-d",
+            "2026-09-07"
+        ]),
         "周一 农历七月廿六（日序 26），生肖马，节气：白露"
     );
 }
@@ -69,7 +102,13 @@ fn date_format_tokens_match_documented_examples() {
 #[test]
 fn date_format_covers_every_documented_token() {
     assert_eq!(
-        run(&["date", "-f", "%Y|%m|%d|%A|%G|%M|%N|%n|%H|%D|%S|%Q|%%", "-d", "2026-09-07"]),
+        run(&[
+            "date",
+            "-f",
+            "%Y|%m|%d|%A|%G|%M|%N|%n|%H|%D|%S|%Q|%%",
+            "-d",
+            "2026-09-07"
+        ]),
         "2026|09|07|一|丙午|七月|廿六|26|丙申|甲申|马|白露|%"
     );
 }
@@ -98,12 +137,29 @@ fn sunday_first_shifts_only_the_columns() {
     assert_ne!(monday, sunday);
 
     let header: Vec<&str> = sunday.lines().take(2).collect();
-    assert_eq!(header, vec!["      2026年9月", "     日     一     二     三     四     五     六"], "{sunday}");
+    assert_eq!(
+        header,
+        vec![
+            "      2026年9月",
+            "     日     一     二     三     四     五     六"
+        ],
+        "{sunday}"
+    );
     // The same days, in columns shifted by one: 1 September is a Tuesday.
     let first_week: Vec<&str> = sunday.lines().skip(2).take(2).collect();
-    assert_eq!(first_week, vec!["                    1      2      3      4      5", "                   二十     廿一     廿二     廿三     廿四"], "{sunday}");
+    assert_eq!(
+        first_week,
+        vec![
+            "                    1      2      3      4      5",
+            "                   二十     廿一     廿二     廿三     廿四"
+        ],
+        "{sunday}"
+    );
     for fragment in ["白露", "中秋", "秋分"] {
-        assert!(sunday.contains(fragment), "expected {fragment} in:\n{sunday}");
+        assert!(
+            sunday.contains(fragment),
+            "expected {fragment} in:\n{sunday}"
+        );
     }
 }
 
@@ -193,15 +249,27 @@ fn number_flag_replaces_chinese_lunar_day() {
 #[test]
 fn month_name_and_festival_overlays_can_be_disabled() {
     let plain = run(&["cal", "2026", "9", "--no-month-name", "--no-festival"]);
-    assert!(!plain.contains("八月"), "month name overlay disabled:\n{plain}");
-    assert!(!plain.contains("中秋"), "festival overlay disabled:\n{plain}");
-    assert!(plain.contains("初一"), "the lunar day is still shown:\n{plain}");
+    assert!(
+        !plain.contains("八月"),
+        "month name overlay disabled:\n{plain}"
+    );
+    assert!(
+        !plain.contains("中秋"),
+        "festival overlay disabled:\n{plain}"
+    );
+    assert!(
+        plain.contains("初一"),
+        "the lunar day is still shown:\n{plain}"
+    );
 }
 
 #[test]
 fn leap_month_is_only_reachable_with_the_leap_flag() {
     let plain = run(&["cal", "-L", "2020", "4"]);
-    assert!(!plain.contains("闰四月"), "plain month 4 is not the leap one:\n{plain}");
+    assert!(
+        !plain.contains("闰四月"),
+        "plain month 4 is not the leap one:\n{plain}"
+    );
     assert!(run(&["cal", "-L", "2020", "4", "-R"]).contains("闰四月"));
     assert!(run_failing(&["cal", "-L", "2021", "4", "-R"]).contains("没有闰月"));
 }
@@ -230,9 +298,13 @@ fn help_format_lists_the_tokens() {
 
 #[test]
 fn a_bare_year_prints_the_whole_year() {
-    // `cal_nongli 2026` documents a single argument as the whole year.
+    // A single positional argument means the whole year.
     let year = run(&["cal", "2026"]);
-    assert_eq!(year.matches("2026年").count(), 12, "twelve months in:\n{year}");
+    assert_eq!(
+        year.matches("2026年").count(),
+        12,
+        "twelve months in:\n{year}"
+    );
     assert!(year.starts_with("      2026年1月\n"));
     // A bare lunar year walks the whole lunar year, leap month included.
     let lunar_year = run(&["cal", "-L", "2020"]);
@@ -248,12 +320,18 @@ fn month_spans_are_supported() {
     assert_eq!(titles.len(), 3, "{span}");
     let three = run(&["cal", "2026", "9", "-n", "3"]);
     let titles: Vec<&str> = three.lines().filter(|line| line.ends_with('月')).collect();
-    assert_eq!(titles, vec!["      2026年9月", "      2026年10月", "      2026年11月"]);
+    assert_eq!(
+        titles,
+        vec!["      2026年9月", "      2026年10月", "      2026年11月"]
+    );
 }
 
 #[test]
 fn small_years_parse() {
-    assert_eq!(run(&["date", "-d", "1-01-01"]), run(&["date", "-d", "0001-01-01"]));
+    assert_eq!(
+        run(&["date", "-d", "1-01-01"]),
+        run(&["date", "-d", "0001-01-01"])
+    );
     assert!(run(&["date", "-d", "1-01-01"]).starts_with("公历：1年1月1日 星期六"));
     assert!(run(&["date", "-d", "999-12-31"]).starts_with("公历：999年12月31日"));
     assert!(run(&["date", "-d", "9999-12-31"]).starts_with("公历：9999年12月31日"));
@@ -263,22 +341,26 @@ fn small_years_parse() {
 fn solar_terms_and_festivals_sit_on_the_days_the_astronomy_gives() {
     // Each of these cells is checked by date, not by copying a sample grid.
     let cases: &[(&[&str], &str)] = &[
-        (&["cal", "2026", "9"], "白露"),   // 处暑/白露/秋分 2026
+        (&["cal", "2026", "9"], "白露"), // 处暑/白露/秋分 2026
         (&["cal", "2026", "9"], "秋分"),
-        (&["cal", "2026", "9"], "中秋"),   // 八月十五 = 2026-09-25
+        (&["cal", "2026", "9"], "中秋"), // 八月十五 = 2026-09-25
         (&["cal", "-L", "2026", "7"], "处暑"), // 2026-08-23
         (&["cal", "-L", "2026", "7"], "中元"), // 七月十五 = 2026-08-27
         (&["cal", "-L", "2026", "7"], "白露"), // 2026-09-07
         (&["cal", "-L", "2026", "7"], "七夕"), // 2026-08-19
         (&["cal", "-L", "2020", "4", "-R"], "芒种"), // 2020-06-05
-        (&["cal", "-L", "2026", "1"], "春节"),  // 2026-02-17
-        (&["cal", "-L", "2026", "1"], "元宵"),  // 2026-03-03
-        (&["cal", "-L", "2026", "1"], "雨水"),  // 2026-02-18
-        (&["cal", "-L", "2026", "1"], "惊蛰"),  // 2026-03-05
+        (&["cal", "-L", "2026", "1"], "春节"), // 2026-02-17
+        (&["cal", "-L", "2026", "1"], "元宵"), // 2026-03-03
+        (&["cal", "-L", "2026", "1"], "雨水"), // 2026-02-18
+        (&["cal", "-L", "2026", "1"], "惊蛰"), // 2026-03-05
     ];
     for (args, expected) in cases {
         let grid = run(args);
-        assert!(grid.contains(expected), "expected {expected} in `lunar {}`:\n{grid}", args.join(" "));
+        assert!(
+            grid.contains(expected),
+            "expected {expected} in `lunar {}`:\n{grid}",
+            args.join(" ")
+        );
     }
 }
 
@@ -287,11 +369,22 @@ fn zhongyuan_is_shown_on_the_lunar_seventh_full_moon() {
     // 中元 is 七月十五 = 2026-08-27; the published sample puts it on 9/6.
     let grid = run(&["cal", "-L", "2026", "7"]);
     let lines: Vec<&str> = grid.lines().collect();
-    let row = lines.iter().position(|line| line.contains("8/27")).expect("a row holding 8/27");
+    let row = lines
+        .iter()
+        .position(|line| line.contains("8/27"))
+        .expect("a row holding 8/27");
     let dates = lines[row].split_whitespace().collect::<Vec<_>>();
-    let column = dates.iter().position(|cell| *cell == "8/27").expect("the 8/27 cell");
+    let column = dates
+        .iter()
+        .position(|cell| *cell == "8/27")
+        .expect("the 8/27 cell");
     let content: Vec<&str> = lines[row + 1].split_whitespace().collect::<Vec<_>>();
-    assert_eq!(content[column], "中元", "the 8/27 cell must carry 中元:\n{}", lines[row + 1]);
+    assert_eq!(
+        content[column],
+        "中元",
+        "the 8/27 cell must carry 中元:\n{}",
+        lines[row + 1]
+    );
     // And nowhere else in the month.
     assert_eq!(grid.matches("中元").count(), 1);
 }

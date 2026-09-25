@@ -54,7 +54,10 @@ impl fmt::Display for CalError {
                 write!(f, "年份 {year} 超出支持范围 ({min}–{max})")
             }
             Self::YearMissing { year } => {
-                write!(f, "{year} 年 10 月 5 日至 14 日不存在（公历改革跳过的 10 天）")
+                write!(
+                    f,
+                    "{year} 年 10 月 5 日至 14 日不存在（公历改革跳过的 10 天）"
+                )
             }
             Self::MonthOutOfRange { month } => write!(f, "月份 {month} 非法 (应为 1–12)"),
             Self::DayOutOfRange { day } => write!(f, "日期 {day} 非法 (应为 1–31)"),
@@ -86,18 +89,30 @@ pub fn check_year(year: i32) -> Result<(), CalError> {
     if (MIN_YEAR..=MAX_YEAR).contains(&year) {
         Ok(())
     } else {
-        Err(CalError::YearOutOfRange { year, min: MIN_YEAR, max: MAX_YEAR })
+        Err(CalError::YearOutOfRange {
+            year,
+            min: MIN_YEAR,
+            max: MAX_YEAR,
+        })
     }
 }
 
 /// Checks a civil month (`1..=12`).
 pub fn check_month(month: i32) -> Result<(), CalError> {
-    if (1..=12).contains(&month) { Ok(()) } else { Err(CalError::MonthOutOfRange { month }) }
+    if (1..=12).contains(&month) {
+        Ok(())
+    } else {
+        Err(CalError::MonthOutOfRange { month })
+    }
 }
 
 /// Checks a civil day (`1..=31`).
 pub fn check_day(day: i32) -> Result<(), CalError> {
-    if (1..=31).contains(&day) { Ok(()) } else { Err(CalError::DayOutOfRange { day }) }
+    if (1..=31).contains(&day) {
+        Ok(())
+    } else {
+        Err(CalError::DayOutOfRange { day })
+    }
 }
 
 /// Builds a [`Solar`] after range and existence checks.
@@ -141,8 +156,8 @@ pub fn year_gan_zhi(lunar: &Lunar) -> String {
 /// GanZhi of the lunar **month** pillar.
 ///
 /// A lunar almanac numbers months from 正月 (`寅`) onwards, which is the
-/// traditional 月柱 and what `date_nongli` calls 干支月; it is independent of
-/// the solar-term instant rule (`Lunar::month_in_gan_zhi`).
+/// traditional 月柱; it is independent of the solar-term instant rule
+/// (`Lunar::month_in_gan_zhi`).
 pub fn month_gan_zhi(lunar: &Lunar) -> String {
     lunar.month_in_gan_zhi_exact()
 }
@@ -191,7 +206,10 @@ const FESTIVAL_LABELS: [(&str, &str); 9] = [
 /// to keep cell labels two characters wide.
 pub fn traditional_festivals(lunar: &Lunar) -> Option<&'static str> {
     let short = |name: &str| -> Option<&'static str> {
-        FESTIVAL_LABELS.iter().find(|(full, _)| *full == name).map(|(_, label)| *label)
+        FESTIVAL_LABELS
+            .iter()
+            .find(|(full, _)| *full == name)
+            .map(|(_, label)| *label)
     };
     lunar
         .festivals()
@@ -213,7 +231,11 @@ pub fn lunar_year(year: i32) -> Result<Arc<LunarYear>, CalError> {
 /// day whose lunar month matches the requested one.
 pub fn lunar_month_start(month: &LunarMonth) -> CivilDate {
     let first = month.first_solar_day();
-    let offset = if first.lunar().month() == month.month() { 0 } else { month.get_day_count() };
+    let offset = if first.lunar().month() == month.month() {
+        0
+    } else {
+        month.get_day_count()
+    };
     let date = first.next_day(offset);
     CivilDate::new(date.year(), date.month(), date.day())
 }
@@ -222,7 +244,8 @@ pub fn lunar_month_start(month: &LunarMonth) -> CivilDate {
 /// month). `LunarYear::get_month` walks the lunar-new-year window, so the
 /// result is checked to belong to `year` before being returned.
 pub fn lunar_year_month(year: &LunarYear, month: i32) -> Option<LunarMonth> {
-    year.get_month(month).filter(|candidate| candidate.year() == year.year())
+    year.get_month(month)
+        .filter(|candidate| candidate.year() == year.year())
 }
 
 /// The months of a lunar year that actually belong to it, in calendar order:
@@ -232,5 +255,8 @@ pub fn lunar_year_month(year: &LunarYear, month: i32) -> Option<LunarMonth> {
 /// yields the tail of the previous lunar year and the head of the next one.
 /// Those months are not part of the requested year, so they are filtered out.
 pub fn lunar_year_months(year: &LunarYear) -> Vec<LunarMonth> {
-    year.months().into_iter().filter(|month| month.year() == year.year()).collect()
+    year.months()
+        .into_iter()
+        .filter(|month| month.year() == year.year())
+        .collect()
 }
