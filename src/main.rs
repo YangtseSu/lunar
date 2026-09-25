@@ -16,6 +16,7 @@ mod civil;
 mod commands;
 mod datestr;
 mod format;
+mod lang;
 mod tz;
 
 use std::io::Write as _;
@@ -120,7 +121,7 @@ fn main() -> ExitCode {
     let today = match tz::today() {
         Ok(today) => today,
         Err(error) => {
-            eprintln!("lunar: {error}");
+            eprintln!("lunar: {}", error.message());
             return ExitCode::FAILURE;
         }
     };
@@ -190,7 +191,7 @@ fn main() -> ExitCode {
             ExitCode::SUCCESS
         }
         Err(error) => {
-            eprintln!("lunar: {error}");
+            eprintln!("lunar: {}", error.message());
             ExitCode::FAILURE
         }
     }

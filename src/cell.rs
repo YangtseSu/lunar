@@ -7,9 +7,9 @@
 //! ```
 //!
 //! Each level can be switched off with `--no-festival` / `--no-month-name`,
-//! and `--number` replaces the Chinese day numerals with digits.
+//! and `--number` replaces the lunar day with its digits.
 
-use lunar_rs::Lunar;
+use lunar_rs::{Lunar, Solar};
 
 use crate::calendar;
 
@@ -36,20 +36,37 @@ impl Default for CellStyle {
 
 /// Label of the lunar day itself, honouring `--number`.
 pub fn day_label(lunar: &Lunar, style: CellStyle) -> String {
-    if style.number {
-        lunar.day().to_string()
-    } else {
-        calendar::lunar_day_name(lunar.day()).to_string()
+    match style.number {
+        true => lunar.day().to_string(),
+        false => calendar::lunar_day_name(lunar.day()).to_string(),
     }
+}
+
+/// The cell content of a day in a **lunar month** view.
+///
+/// The lunar grid leads with the civil date, so the month name is redundant
+/// with the title and only the overlays apply: festival, else solar term, else
+/// the lunar day. The civil overlay adds the month-name level through
+/// [`content`].
+pub fn lunar_month_content(solar: &Solar, lunar: &Lunar, style: CellStyle) -> String {
+    if style.festival
+        && let Some(name) = calendar::traditional_festivals(solar, lunar)
+    {
+        return name;
+    }
+    if let Some(term) = calendar::jie_qi(lunar) {
+        return term;
+    }
+    day_label(lunar, style)
 }
 
 /// The full cell content: festival, else month name on 初一, else solar term,
 /// else the lunar day.
-pub fn content(lunar: &Lunar, style: CellStyle) -> String {
+pub fn content(solar: &Solar, lunar: &Lunar, style: CellStyle) -> String {
     if style.festival
-        && let Some(name) = calendar::traditional_festivals(lunar)
+        && let Some(name) = calendar::traditional_festivals(solar, lunar)
     {
-        return name.to_string();
+        return name;
     }
     // The lunar new year day keeps its festival label; every other 初一 shows
     // the month name instead of the day number.
@@ -57,7 +74,7 @@ pub fn content(lunar: &Lunar, style: CellStyle) -> String {
         return calendar::lunar_month_name(lunar.month());
     }
     if let Some(term) = calendar::jie_qi(lunar) {
-        return term.to_string();
+        return term;
     }
     day_label(lunar, style)
 }

@@ -47,31 +47,34 @@ pub enum CalError {
     TodayOutOfRange,
 }
 
-impl fmt::Display for CalError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl CalError {
+    /// The user-facing message, in Simplified Chinese.
+    pub fn message(&self) -> String {
         match self {
             Self::YearOutOfRange { year, min, max } => {
-                write!(f, "年份 {year} 超出支持范围 ({min}–{max})")
+                format!("年份 {year} 超出支持范围 ({min}–{max})")
             }
             Self::YearMissing { year } => {
-                write!(
-                    f,
-                    "{year} 年 10 月 5 日至 14 日不存在（公历改革跳过的 10 天）"
-                )
+                format!("{year} 年 10 月 5 日至 14 日不存在（公历改革跳过的 10 天）")
             }
-            Self::MonthOutOfRange { month } => write!(f, "月份 {month} 非法 (应为 1–12)"),
-            Self::DayOutOfRange { day } => write!(f, "日期 {day} 非法 (应为 1–31)"),
+            Self::MonthOutOfRange { month } => format!("月份 {month} 非法 (应为 1–12)"),
+            Self::DayOutOfRange { day } => format!("日期 {day} 非法 (应为 1–31)"),
             Self::NonexistentDate { year, month, day } => {
-                write!(f, "公历 {year}-{month:02}-{day:02} 不存在")
+                format!("公历 {year}-{month:02}-{day:02} 不存在")
             }
             Self::NoSuchLunarMonth { year, month } => {
-                let name = m_abs(*month);
-                write!(f, "农历 {year} 年没有{name}月")
+                format!("农历 {year} 年没有{}月", m_abs(*month))
             }
-            Self::NoLeapMonth { year } => write!(f, "农历 {year} 年没有闰月"),
-            Self::UnparsableDate { input } => write!(f, "无法解析的日期: {input}"),
-            Self::TodayOutOfRange => write!(f, "当前日期超出支持范围 (1–9999 年)"),
+            Self::NoLeapMonth { year } => format!("农历 {year} 年没有闰月"),
+            Self::UnparsableDate { input } => format!("无法解析的日期: {input}"),
+            Self::TodayOutOfRange => "当前日期超出支持范围 (1–9999 年)".to_string(),
         }
+    }
+}
+
+impl fmt::Display for CalError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.message())
     }
 }
 
@@ -166,56 +169,73 @@ pub fn month_gan_zhi(lunar: &Lunar) -> String {
 pub fn day_gan_zhi(lunar: &Lunar) -> String {
     lunar.day_in_gan_zhi()
 }
+
+/// Chinese zodiac animal of the lunar year.
+pub fn sheng_xiao(lunar: &Lunar) -> String {
+    lunar.year_sheng_xiao().to_string()
+}
+
+/// The solar term falling exactly on this day, if any.
+pub fn jie_qi(lunar: &Lunar) -> Option<String> {
+    match lunar.jie_qi() {
+        "" => None,
+        name => Some(name.to_string()),
+    }
+}
+
 /// How many blank cells precede day 1 of a civil month when a week starts on
 /// `week_start` (0 = Sunday).
 pub fn week_offset(year: i32, month: i32, week_start: i32) -> usize {
     (solar_util::week(year, month, 1) - week_start).rem_euclid(7) as usize
 }
 
-/// Chinese zodiac animal of the lunar year.
-pub fn sheng_xiao(lunar: &Lunar) -> &'static str {
-    lunar.year_sheng_xiao()
-}
-
-/// The solar term falling exactly on this day, if any.
-pub fn jie_qi(lunar: &Lunar) -> Option<&'static str> {
-    match lunar.jie_qi() {
-        "" => None,
-        name => Some(name),
-    }
-}
-
-/// The nine traditional festivals that `cal` highlights in its cells, mapped to
-/// their two-character cell labels.
-const FESTIVAL_LABELS: [(&str, &str); 9] = [
-    ("除夕", "除夕"),
-    ("春节", "春节"),
-    ("元宵节", "元宵"),
-    ("清明", "清明"),
-    ("端午节", "端午"),
-    ("七夕节", "七夕"),
-    ("中元节", "中元"),
-    ("中秋节", "中秋"),
-    ("重阳节", "重阳"),
-];
-
-/// The festival to highlight for a day, if any.
+/// The festival a cell shows, or `None` when the day carries none.
 ///
-/// `lunar-rs` keeps 七夕 and 中元 in its "other festival" table rather than in
-/// `Lunar::festivals`, so both lists are consulted; the `节` suffix is trimmed
-/// to keep cell labels two characters wide.
-pub fn traditional_festivals(lunar: &Lunar) -> Option<&'static str> {
-    let short = |name: &str| -> Option<&'static str> {
-        FESTIVAL_LABELS
-            .iter()
-            .find(|(full, _)| *full == name)
-            .map(|(_, label)| *label)
-    };
-    lunar
+/// Both calendars' festivals are consulted. `Lunar::festivals` knows the
+/// lunar ones (春节, 中秋节) and `Solar::festivals` the civil ones (国庆节,
+/// 劳动节) plus the floating ones keyed to a weekday (母亲节, 感恩节), so
+/// asking only one of them silently drops the other half — an October grid
+/// would show 廿一 where 国庆节 belongs.
+///
+/// The name is the engine's own, `中秋节` and not a shortened `中秋`; when a
+/// day carries several, the one a reader recognises wins.
+pub fn traditional_festivals(solar: &Solar, lunar: &Lunar) -> Option<String> {
+    solar
         .festivals()
-        .into_iter()
-        .find_map(short)
-        .or_else(|| lunar.other_festivals().into_iter().find_map(short))
+        .iter()
+        .chain(lunar.festivals().iter())
+        .min_by_key(|name| festival_rank(name))
+        .map(|name| name.to_string())
+}
+
+/// Sort key for [`traditional_festivals`]: lower wins.
+///
+/// The festivals a reader scans a calendar for come first, lunar and civil
+/// alike; everything else follows, so a busy day still shows its most
+/// recognisable name.
+fn festival_rank(name: &str) -> usize {
+    const PRINCIPAL: [&str; 16] = [
+        "春节",
+        "元宵节",
+        "清明",
+        "端午",
+        "七夕节",
+        "中元节",
+        "中秋节",
+        "重阳节",
+        "除夕",
+        "元旦节",
+        "劳动节",
+        "国庆节",
+        "儿童节",
+        "青年节",
+        "妇女节",
+        "教师节",
+    ];
+    PRINCIPAL
+        .iter()
+        .position(|principal| *principal == name)
+        .unwrap_or(usize::MAX)
 }
 
 /// A whole lunar year, for `cal -L <year>`.

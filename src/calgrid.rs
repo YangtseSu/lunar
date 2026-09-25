@@ -7,9 +7,9 @@
 //!
 //!   ```text
 //!         2026年9月
-//!   一     二     三     四     五     六     日
-//!          1      2      3      4      5      6
-//!          二十   廿一   廿二   廿三   廿四   廿五
+//!     一      二      三      四      五      六      日
+//!           1       2       3       4       5       6
+//!           二十    廿一    廿二    廿三    廿四    廿五
 //!   ```
 //!
 //! * **lunar month** (`-L`) — one lunar month, each cell `M/D` over the same
@@ -17,20 +17,23 @@
 //!
 //!   ```text
 //!       农历 丙午年 七月
-//!   一     二     三     四     五     六     日
-//!                        8/13   8/14   8/15   8/16
-//!                        初一   初二   初三   初四
+//!     一      二      三      四      五      六      日
+//!                     8/13    8/14    8/15    8/16
+//!                     初一    初二    初三    初四
 //!   ```
 //!
-//! Layout rules taken from those examples:
+//! Layout rules:
 //!
-//! * the cell pitch is 7 for the civil overlay (the widest cell content is a
-//!   two-character solar term) and 6 for the lunar view;
-//! * the weekday header is always 6 wide, so both views share one header line;
-//! * the title is indented by 6 spaces (civil) or 5 (lunar view);
-//! * days of the neighbouring months are blank in the content band, and the
-//!   leading padding week is dropped entirely unless the month starts in the
-//!   first column.
+//! * cells are padded to a common width measured in **display columns**
+//!   (`lang::width`), not characters, so a two-glyph label and a five-digit
+//!   date line up;
+//! * the width is the widest label or content the grid holds, so a month
+//!   carrying `中秋节` is wider than one that does not, and every row of that
+//!   grid shares the width;
+//! * cells are left-aligned within their column and every line is
+//!   `trim_end`ed;
+//! * only the days of the month are shown: the days that share a week with
+//!   its first day, and those after its last, are blank.
 
 use std::fmt::Write as _;
 
@@ -39,17 +42,27 @@ use lunar_rs::LunarMonth;
 use crate::calendar::{self, CalError};
 use crate::cell::{self, CellStyle};
 use crate::civil::CivilDate;
+use crate::lang;
 
-/// Cell pitch of the civil overlay.
-const CIVIL_PITCH: usize = 7;
-/// Cell pitch of the lunar-month view.
-const LUNAR_PITCH: usize = 6;
-/// Weekday header pitch, identical in both views.
-const HEADER_PITCH: usize = 6;
-/// Title indent of the civil overlay.
-const CIVIL_TITLE_INDENT: usize = 6;
-/// Title indent of the lunar view.
-const LUNAR_TITLE_INDENT: usize = 5;
+/// Blank columns between two cells, so a cell that exactly fills its column
+/// still reads as separate from its neighbour.
+const GUTTER: usize = 2;
+
+/// What distinguishes one month's grid from another.
+struct Month {
+    /// Title line of the grid.
+    title: String,
+    /// Day 1 of the month.
+    first: CivilDate,
+    /// Blank cells before day 1.
+    lead: usize,
+    /// Days in the month.
+    count: usize,
+    /// Whether cells lead with a civil `M/D` rather than a day of month.
+    lunar_view: bool,
+    /// 0 = Sunday, 1 = Monday.
+    week_start: i32,
+}
 
 /// One day slot of a grid.
 struct Entry {
@@ -64,17 +77,16 @@ struct Entry {
 /// A run of consecutive days forming one grid.
 pub struct Grid {
     title: String,
-    title_indent: usize,
     days: Vec<Entry>,
-    pitch: usize,
+    column: usize,
+    week_start: i32,
 }
 
 impl Grid {
     /// Grid for one lunar month.
     ///
     /// The lunar view keeps weekday alignment: day 1 of the month sits in the
-    /// column of its weekday, and the days before it are left blank. Cells are
-    /// 6 wide, which also fits a three-character cell such as `闰四月`.
+    /// column of its weekday, and the days before it are left blank.
     pub fn lunar(
         title: String,
         month: LunarMonth,
@@ -83,154 +95,152 @@ impl Grid {
     ) -> Result<Self, CalError> {
         let first = calendar::lunar_month_start(&month);
         let lead = (first.weekday() - week_start).rem_euclid(7) as usize;
-        let mut grid = Self::build(
-            title,
-            first.add_days(-(lead as i64)),
-            lead,
-            month.get_day_count() as usize,
-            Some(month.month()),
+        let count = month.get_day_count() as usize;
+        Self::build(
+            Month {
+                title,
+                first,
+                lead,
+                count,
+                lunar_view: true,
+                week_start,
+            },
             style,
-        )?;
-        for index in 0..lead {
-            if let Some(entry) = grid.days.get_mut(index) {
-                entry.label.clear();
-                entry.content.clear();
-                entry.in_month = false;
-            }
-        }
-        Ok(grid)
+        )
     }
 
-    /// Fills whole weeks starting at `first`; a cell belongs to the rendered
-    /// month when it is one of its `days`, or when its lunar month is
-    /// `lunar_month` (the first day of a lunar month).
-    fn build(
-        title: String,
-        first: CivilDate,
-        lead: usize,
-        days: usize,
-        lunar_month: Option<i32>,
-        style: CellStyle,
-    ) -> Result<Self, CalError> {
-        // A lone overflow day is dropped, but a partially filled last week is
-        // completed with the next month's days, as `cal` does; those cells keep
-        // their date but never carry lunar content.
-        let natural = (lead + days).div_ceil(7) * 7;
-        let slots = match natural - lead - days {
-            0 | 1 => natural,
-            rest => natural - rest + 7,
-        };
-        let mut entries = Vec::with_capacity(slots);
-        for index in 0..slots {
-            let solar = first.add_days(index as i64).to_solar()?;
-            let lunar = solar.lunar();
-            let in_month = index < days || lunar_month == Some(lunar.month());
-            let label = match lunar_month {
-                Some(_) => format!("{}/{}", solar.month(), solar.day()),
-                None => solar.day().to_string(),
-            };
-            let content = if in_month {
-                cell::content(&lunar, style)
-            } else {
-                String::new()
-            };
-            entries.push(Entry {
-                label,
-                content,
-                in_month,
-            });
-        }
-        let (pitch, title_indent) = match lunar_month {
-            Some(_) => (LUNAR_PITCH, LUNAR_TITLE_INDENT),
-            None => (CIVIL_PITCH, CIVIL_TITLE_INDENT),
-        };
-        Ok(Self {
-            title,
-            title_indent,
-            days: entries,
-            pitch,
-        })
-    }
-    /// Grid for one civil month whose leading neighbouring-month days are
-    /// blanked out, the way `cal` does it: the days that share a week with the
-    /// first of the month are not shown, so a grid never opens on a partial
-    /// week. The documented samples print exactly that, e.g. 2026年9月 opens
-    /// with a week that starts on 1 September.
-    pub fn civil_blanked(
+    /// Grid for one civil month.
+    pub fn civil(
         title: String,
         year: i32,
         month: i32,
         week_start: i32,
         style: CellStyle,
     ) -> Result<Self, CalError> {
-        let days = calendar::days_in_civil_month(year, month) as usize;
+        let count = calendar::days_in_civil_month(year, month) as usize;
         let lead = calendar::week_offset(year, month, week_start);
-        let slots = (lead + days).div_ceil(7) * 7;
-        let blank = (slots - lead - days).min(lead);
-        let mut grid = Self::build(
-            title,
-            CivilDate::new(year, month, 1).add_days(-(lead as i64)),
-            lead,
-            days,
-            None,
+        Self::build(
+            Month {
+                title,
+                first: CivilDate::new(year, month, 1),
+                lead,
+                count,
+                lunar_view: false,
+                week_start,
+            },
             style,
-        )?;
-        for index in 0..blank {
-            if let Some(entry) = grid.days.get_mut(index) {
-                entry.label.clear();
-                entry.content.clear();
-                entry.in_month = false;
-            }
+        )
+    }
+    /// Fills whole weeks starting at the month's first day.
+    ///
+    /// `first` is day 1 of the month; slot `lead` holds it and the slots
+    /// before and after the month are blank padding. Every day of the month
+    /// gets exactly one slot, so the last day is never dropped.
+    fn build(spec: Month, style: CellStyle) -> Result<Self, CalError> {
+        let Month {
+            title,
+            first,
+            lead,
+            count,
+            lunar_view,
+            week_start,
+        } = spec;
+        let slots = (lead + count).div_ceil(7) * 7;
+        let mut days = Vec::with_capacity(slots);
+        for index in 0..slots {
+            let offset = index as i64 - lead as i64;
+            let in_month = offset >= 0 && (offset as usize) < count;
+            let (label, content) = match in_month {
+                true => {
+                    let solar = first.add_days(offset).to_solar()?;
+                    let lunar = solar.lunar();
+                    let label = match lunar_view {
+                        true => format!("{}/{}", solar.month(), solar.day()),
+                        false => solar.day().to_string(),
+                    };
+                    let content = match lunar_view {
+                        true => cell::lunar_month_content(&solar, &lunar, style),
+                        false => cell::content(&solar, &lunar, style),
+                    };
+                    (label, content)
+                }
+                false => (String::new(), String::new()),
+            };
+            days.push(Entry {
+                label,
+                content,
+                in_month,
+            });
         }
-        Ok(grid)
+        let column = column_width(&days, week_start);
+        Ok(Self {
+            title,
+            days,
+            column,
+            week_start,
+        })
     }
 
     /// Renders the grid, appending to `out`.
-    pub fn render(&self, week_start: i32, out: &mut String) {
-        let _ = writeln!(out, "{}{}", " ".repeat(self.title_indent), self.title);
-        let _ = writeln!(out, "{}", weekday_header(week_start));
+    pub fn render(&self, out: &mut String) {
+        let _ = writeln!(out, "{}", self.title);
+        let _ = writeln!(out, "{}", self.header());
 
         for chunk in self.days.chunks(7) {
             if chunk.iter().all(|entry| !entry.in_month) {
                 continue;
             }
-            let _ = writeln!(out, "{}", self.row_line(chunk, |entry| entry.label.clone()));
-            let _ = writeln!(
-                out,
-                "{}",
-                self.row_line(chunk, |entry| entry.content.clone())
-            );
+            let _ = writeln!(out, "{}", self.row_line(chunk, |entry| &entry.label));
+            let _ = writeln!(out, "{}", self.row_line(chunk, |entry| &entry.content));
         }
     }
 
-    /// One output line; `label` supplies each cell's text.
-    fn row_line(&self, chunk: &[Entry], label: impl Fn(&Entry) -> String) -> String {
-        let mut line = String::with_capacity(self.pitch * 7);
+    /// The `一      二      …` heading, on the grid's own column width.
+    fn header(&self) -> String {
+        let mut line = String::with_capacity((self.column + GUTTER) * 7);
+        for offset in 0..7 {
+            let weekday = (self.week_start + offset).rem_euclid(7);
+            line.push_str(&lang::pad_right(
+                calendar::weekday_name(weekday),
+                self.column,
+            ));
+            line.push_str(&" ".repeat(GUTTER));
+        }
+        line.trim_end().to_string()
+    }
+
+    /// One output line; `text` supplies each cell's content.
+    fn row_line<'e>(&self, chunk: &'e [Entry], text: impl Fn(&'e Entry) -> &'e str) -> String {
+        let mut line = String::with_capacity((self.column + GUTTER) * 7);
         for entry in chunk {
-            let text = if entry.in_month {
-                label(entry)
-            } else {
-                String::new()
+            let cell = match entry.in_month {
+                true => text(entry),
+                false => "",
             };
-            let _ = write!(line, "{:>width$}", text, width = self.pitch);
+            line.push_str(&lang::pad_right(cell, self.column));
+            line.push_str(&" ".repeat(GUTTER));
         }
         line.trim_end().to_string()
     }
 }
 
-/// `一     二     …` on the shared header pitch.
-fn weekday_header(week_start: i32) -> String {
-    let mut line = String::with_capacity(HEADER_PITCH * 7);
-    for column in 0..7 {
-        let weekday = (week_start + column).rem_euclid(7);
-        let _ = write!(
-            line,
-            "{:>width$}",
-            calendar::weekday_name(weekday),
-            width = HEADER_PITCH
-        );
+/// The grid's cell width: the widest content it must hold.
+///
+/// The heading counts too, so a grid is never narrower than its own column
+/// labels.
+fn column_width(days: &[Entry], week_start: i32) -> usize {
+    let mut widest = days
+        .iter()
+        .filter(|entry| entry.in_month)
+        .flat_map(|entry| [entry.label.as_str(), entry.content.as_str()])
+        .map(lang::width)
+        .max()
+        .unwrap_or(0);
+    for offset in 0..7 {
+        let weekday = (week_start + offset).rem_euclid(7);
+        widest = widest.max(lang::width(calendar::weekday_name(weekday)));
     }
-    line.trim_end().to_string()
+    widest
 }
 
 /// The `2026年9月` title of the civil overlay.

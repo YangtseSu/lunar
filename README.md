@@ -24,11 +24,11 @@ cargo build --release
 
 ```console
 $ lunar date -d 2026-09-07
-公历：2026年9月7日 星期一
-农历：丙午年七月廿六
-干支：丙午年 丙申月 甲申日
-生肖：马
-节气：白露
+公历: 2026年9月7日 星期一
+农历: 丙午年七月廿六
+干支: 丙午 丙申 甲申
+生肖: 马
+节气: 白露
 ```
 
 The `节气` line is omitted when the day carries no solar term. A leap month shows
@@ -36,10 +36,10 @@ up in the month name:
 
 ```console
 $ lunar date -d 2020-05-23
-公历：2020年5月23日 星期六
-农历：庚子年闰四月初一
-干支：庚子年 辛巳月 丙寅日
-生肖：鼠
+公历: 2020年5月23日 星期六
+农历: 庚子年闰四月初一
+干支: 庚子 辛巳 丙寅
+生肖: 鼠
 ```
 
 The day can also be given as positionals, or as a `date(1)` style string:
@@ -99,41 +99,45 @@ term or festival under each date:
 
 ```console
 $ lunar cal 2026 9
-      2026年9月
-     一     二     三     四     五     六     日
-             1      2      3      4      5      6
-            二十     廿一     廿二     廿三     廿四     廿五
-      7      8      9     10     11     12     13
-     白露   廿七   廿八   廿九   八月   初二   初三
-     14     15     16     17     18     19     20
-     初四   初五   初六   初七   初八   初九   初十
-     21     22     23     24     25     26     27
-     十一   十二   秋分   十四   中秋   十六   十七
-     28     29
-     十八   十九
+2026年9月
+一      二      三      四      五      六      日
+        1       2       3       4       5       6
+        二十    廿一    廿二    廿三    廿四    廿五
+7       8       9       10      11      12      13
+白露    廿七    廿八    廿九    八月    初二    初三
+14      15      16      17      18      19      20
+初四    初五    初六    初七    初八    初九    初十
+21      22      23      24      25      26      27
+十一    十二    秋分    十四    中秋节  十六    十七
+28      29      30
+十八    十九    二十
 ```
 
 Cell content follows a fixed priority — **节日 > 初一显示月份名 > 节气 > 农历日** —
 so 11 September shows 八月 instead of 初一, 7 September is covered by 白露 and
-25 September by 中秋.
+25 September by 中秋节. Both calendars' festivals count: 1 October shows 国庆节,
+and a day carrying several shows the one a reader recognises, so 十月十日 is
+地藏节 rather than the more obscure 天灸日.
 
 `-L` switches to lunar months, where each cell leads with the civil date:
 
 ```console
 $ lunar cal -L 2026 7
-     农历 丙午年 七月
-     一     二     三     四     五     六     日
-                    8/13  8/14  8/15  8/16
-                      七月    初二    初三    初四
-  8/17  8/18  8/19  8/20  8/21  8/22  8/23
-    初五    初六    七夕    初八    初九    初十    处暑
-  8/24  8/25  8/26  8/27  8/28  8/29  8/30
-    十二    十三    十四    中元    十六    十七    十八
-  …
+农历 丙午年 七月
+一      二      三      四      五      六      日
+                        8/13    8/14    8/15    8/16
+                        初一    初二    初三    初四
+8/17    8/18    8/19    8/20    8/21    8/22    8/23
+初五    初六    七夕节  初八    初九    初十    处暑
+8/24    8/25    8/26    8/27    8/28    8/29    8/30
+十二    十三    十四    十五    十六    十七    十八
+8/31    9/1     9/2     9/3     9/4     9/5     9/6
+十九    二十    廿一    廿二    廿三    廿四    廿五
+9/7     9/8     9/9     9/10
+白露    廿七    廿八    廿九
 ```
 
-处暑 lands on 8/23 and 中元 — the fifteenth of the seventh lunar month — on
-8/27, both from the astronomical engine.
+处暑 lands on 8/23 and 七夕节 on 8/19, both from the astronomical engine.
 
 Options:
 
@@ -163,8 +167,8 @@ extrapolated lunar months and solar terms are not meant to be relied on. Years
 outside the range, impossible dates and the days the Gregorian reform skipped
 (1582-10-05 … 1582-10-14) are reported as errors.
 
-Because the cells are laid out by character count and every label is Chinese, the
-output is designed for a terminal with a CJK-capable font.
+Because the cells are laid out by display width, the output is designed for a
+terminal with a CJK-capable font.
 
 ## Implementation notes
 
@@ -173,14 +177,19 @@ output is designed for a terminal with a CJK-capable font.
 - `src/civil.rs` — the epoch ↔ civil-date bridge. `lunar-rs` models the 1582
   Gregorian reform, so its `Solar` refuses 1582-10-05..14; the civil arithmetic
   needed by the `-d` parser and the grids lives here.
-- `src/calgrid.rs` — grid layout. The cell pitch is 7 for the civil overlay and 6
-  for the lunar view, while the weekday header is always 6 wide. Neighbouring
-  month days are blanked the way `cal` does it: a grid never opens on a partial
-  week, and a lone overflow day at the end is kept.
+- `src/calgrid.rs` — grid layout. Cells are padded by **display width**, not by
+  character count, so a two-glyph label and a two-digit day line up. The column
+  width is the widest cell the grid holds, so a month carrying `中秋节` is wider
+  than one that does not; days of the neighbouring months are blank.
 - `src/cell.rs` — the cell content priority.
 - `src/datestr.rs` — the `date(1)` style `-d` parser.
 - `src/format.rs` — the `-f` token engine.
+- `src/lang.rs` — the display-width measurement the grid layout depends on.
 - `src/commands/` — the two subcommands.
+
+Festivals come from both calendars: the lunar ones (春节, 中秋节, 端午) and the
+civil ones (国庆节, 劳动节, 儿童节), including those that float to a weekday
+(母亲节, 感恩节). `--no-festival` turns off both.
 
 `lunar-rs` numbers months from 正月 (`寅`) for the month pillar, which is the
 traditional almanac convention; `tz-rs` resolves `TZ` for the local "today".
@@ -193,8 +202,9 @@ cargo test
 
 `tests/documented_examples.rs` pins the documented layout, the token table, the
 overlay switches and the error messages, and separately pins the calendar values
-by date (中元 on the fifteenth of the seventh lunar month, 芒种 on 2020-06-05,
-and so on).
+by date (芒种 on 2020-06-05, and so on), and a check that **every** month of the
+year shows every one of its days — the invariant the civil overlay used to
+break.
 
 Where a published sample disagrees with the astronomical engine, the engine
 wins: a few sample cells are stale (中元 shown three days early, 芒种 on the

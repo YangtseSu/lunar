@@ -19,6 +19,8 @@ use crate::civil::CivilDate;
 use crate::datestr;
 use crate::format;
 
+use std::fmt::Write as _;
+
 /// Everything `lunar date` was asked to do.
 #[derive(Debug, Clone)]
 pub struct DateArgs {
@@ -79,27 +81,30 @@ fn number(text: &str) -> Result<i32, CalError> {
 /// The default five-line profile.
 fn write_profile(solar: Solar, out: &mut String) {
     let lunar = solar.lunar();
-    out.push_str(&format!(
-        "公历：{}年{}月{}日 星期{}\n",
+    let _ = writeln!(
+        out,
+        "公历: {}年{}月{}日 星期{}",
         solar.year(),
         solar.month(),
         solar.day(),
-        calendar::weekday_name(solar.week())
-    ));
-    out.push_str(&format!(
-        "农历：{}年{}{}\n",
+        calendar::weekday_name(solar.week()),
+    );
+    let _ = writeln!(
+        out,
+        "农历: {}年{}{}",
         calendar::year_gan_zhi(&lunar),
         calendar::lunar_month_name(lunar.month()),
-        calendar::lunar_day_name(lunar.day())
-    ));
-    out.push_str(&format!(
-        "干支：{}年 {}月 {}日\n",
+        calendar::lunar_day_name(lunar.day()),
+    );
+    let _ = writeln!(
+        out,
+        "干支: {} {} {}",
         calendar::year_gan_zhi(&lunar),
         calendar::month_gan_zhi(&lunar),
-        calendar::day_gan_zhi(&lunar)
-    ));
-    out.push_str(&format!("生肖：{}\n", calendar::sheng_xiao(&lunar)));
+        calendar::day_gan_zhi(&lunar),
+    );
+    let _ = writeln!(out, "生肖: {}", calendar::sheng_xiao(&lunar));
     if let Some(term) = calendar::jie_qi(&lunar) {
-        out.push_str(&format!("节气：{term}\n"));
+        let _ = writeln!(out, "节气: {term}");
     }
 }

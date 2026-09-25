@@ -101,14 +101,14 @@ fn run_civil(
                 max: MAX_YEAR,
             });
         }
-        let grid = Grid::civil_blanked(
+        let grid = Grid::civil(
             calgrid::civil_title(cursor.year, cursor.month),
             cursor.year,
             cursor.month,
             week_start,
             style,
         )?;
-        grid.render(week_start, out);
+        grid.render(out);
         cursor = cursor.add_months(1);
     }
     Ok(())
@@ -148,7 +148,7 @@ fn run_lunar(
             out.push('\n');
         }
         let grid = Grid::lunar(lunar_month_title(month), *month, week_start, style)?;
-        grid.render(week_start, out);
+        grid.render(out);
     }
     Ok(())
 }
@@ -198,7 +198,8 @@ fn select_lunar_months(
     Ok(all.into_iter().skip(start).take(span).collect())
 }
 
-/// `农历 丙午年 七月`, with `闰` for a leap month.
+/// `农历 丙午年 七月`, with `闰` for a leap month; the year pillar and the
+/// month name are rendered in the chosen language.
 fn lunar_month_title(month: &LunarMonth) -> String {
     let first = month.get_first_day();
     let gan_zhi = first
