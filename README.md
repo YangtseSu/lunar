@@ -128,8 +128,13 @@ $ lunar cal -L 2026 7
                       七月    初二    初三    初四
   8/17  8/18  8/19  8/20  8/21  8/22  8/23
     初五    初六    七夕    初八    初九    初十    处暑
+  8/24  8/25  8/26  8/27  8/28  8/29  8/30
+    十二    十三    十四    中元    十六    十七    十八
   …
 ```
+
+处暑 lands on 8/23 and 中元 — the fifteenth of the seventh lunar month — on
+8/27, both from the astronomical engine.
 
 Options:
 
@@ -187,9 +192,14 @@ traditional almanac convention; `tz-rs` resolves `TZ` for the local "today".
 cargo test
 ```
 
-`tests/documented_examples.rs` pins every example published for this tool,
-including the four grid layouts, the token table, the overlay switches and the
-error messages.
+`tests/documented_examples.rs` pins the documented layout, the token table, the
+overlay switches and the error messages, and separately pins the calendar values
+by date (中元 on the fifteenth of the seventh lunar month, 芒种 on 2020-06-05,
+and so on).
+
+Where a published sample disagrees with the astronomical engine, the engine
+wins: a few sample cells are stale (中元 shown three days early, 芒种 on the
+wrong day, 雨水 and 惊蛰 missing), and this tool prints the computed dates.
 
 ## License
 

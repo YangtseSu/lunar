@@ -170,22 +170,34 @@ pub fn jie_qi(lunar: &Lunar) -> Option<&'static str> {
     }
 }
 
-/// The nine traditional festivals that `cal` highlights in its cells:
-/// `除夕`, `春节`, `元宵`, `清明`, `端午`, `七夕`, `中元`, `中秋`, `重阳`.
+/// The nine traditional festivals that `cal` highlights in its cells, mapped to
+/// their two-character cell labels.
+const FESTIVAL_LABELS: [(&str, &str); 9] = [
+    ("除夕", "除夕"),
+    ("春节", "春节"),
+    ("元宵节", "元宵"),
+    ("清明", "清明"),
+    ("端午节", "端午"),
+    ("七夕节", "七夕"),
+    ("中元节", "中元"),
+    ("中秋节", "中秋"),
+    ("重阳节", "重阳"),
+];
+
+/// The festival to highlight for a day, if any.
 ///
-/// `lunar-rs` appends a 节 suffix to several of them, so it is trimmed here to
-/// keep cell labels short.
+/// `lunar-rs` keeps 七夕 and 中元 in its "other festival" table rather than in
+/// `Lunar::festivals`, so both lists are consulted; the `节` suffix is trimmed
+/// to keep cell labels two characters wide.
 pub fn traditional_festivals(lunar: &Lunar) -> Option<&'static str> {
-    lunar.festivals().into_iter().find_map(|name| match name {
-        "除夕" | "春节" | "清明" => Some(name),
-        "元宵节" => Some("元宵"),
-        "端午节" => Some("端午"),
-        "七夕节" => Some("七夕"),
-        "中元节" => Some("中元"),
-        "中秋节" => Some("中秋"),
-        "重阳节" => Some("重阳"),
-        _ => None,
-    })
+    let short = |name: &str| -> Option<&'static str> {
+        FESTIVAL_LABELS.iter().find(|(full, _)| *full == name).map(|(_, label)| *label)
+    };
+    lunar
+        .festivals()
+        .into_iter()
+        .find_map(short)
+        .or_else(|| lunar.other_festivals().into_iter().find_map(short))
 }
 
 /// A whole lunar year, for `cal -L <year>`.

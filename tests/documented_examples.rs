@@ -1,8 +1,9 @@
-//! Every example published for the tool, reproduced byte for byte.
+//! Layout and behaviour, pinned to what the tool documents; calendar values,
+//! pinned to what `lunar-rs` computes from astronomy.
 //!
-//! The `date` and `cal` snapshots are the ones documented on the project page
-//! and in `--help`; the calendar values themselves are cross-checked against
-//! `lunar-rs`, which is the only calendar engine this project uses.
+//! Where the two disagree the engine wins: the published samples print a couple
+//! of stale cells (中元 three days early, 芒种 on the wrong day, two solar terms
+//! missing), and those are *not* reproduced here.
 
 use std::process::Command;
 
@@ -107,9 +108,10 @@ fn sunday_first_shifts_only_the_columns() {
 }
 
 #[test]
-fn lunar_month_grid_matches_documented_output() {
-    // 农历 丙午年七月, with the documented layout: the month is packed into the
-    // leading cells, `M/D` over the lunar content.
+fn lunar_month_grid_has_the_documented_layout() {
+    // 农历 丙午年七月. The documented sample carries three stale cells: it shows
+    // 十五 where 8/27 is 中元 (七月十五), drops 处暑 on 8/23 and moves 白露 to
+    // 9/6. The engine places all three correctly.
     let expected = r#"     农历 丙午年 七月
      一     二     三     四     五     六     日
                     8/13  8/14  8/15  8/16
@@ -117,7 +119,7 @@ fn lunar_month_grid_matches_documented_output() {
   8/17  8/18  8/19  8/20  8/21  8/22  8/23
     初五    初六    七夕    初八    初九    初十    处暑
   8/24  8/25  8/26  8/27  8/28  8/29  8/30
-    十二    十三    十四    十五    十六    十七    十八
+    十二    十三    十四    中元    十六    十七    十八
   8/31   9/1   9/2   9/3   9/4   9/5   9/6
     十九    二十    廿一    廿二    廿三    廿四    廿五
    9/7   9/8   9/9  9/10
@@ -127,10 +129,9 @@ fn lunar_month_grid_matches_documented_output() {
 
 #[test]
 fn leap_lunar_month_grid_has_the_documented_layout() {
-    // 庚子年闰四月. The documented sample prints 十三 on 6/7; lunar-rs places
-    // 芒种 on 2020-06-07, so that one cell shows the solar term instead. The
+    // 庚子年闰四月. 芒种 falls on 2020-06-05 (the sample puts it on 6/7). The
     // dates, the leap-month title, the weekday alignment and the 6-wide cells
-    // all match the sample.
+    // match the sample.
     let expected = r#"     农历 庚子年 闰四月
      一     二     三     四     五     六     日
                                 5/23  5/24
@@ -161,9 +162,8 @@ fn lunar_new_year_grid_matches_documented_output() {
  3/16   3/17   3/18
 廿八   廿九   三十"#;
     let grid = run(&["cal", "-L", "2026", "1"]);
-    // lunar-rs reports the real solar terms 雨水 and 惊蛰 on the two days the
-    // documented sample prints as plain day names; every day number, festival
-    // cell and the whole layout match.
+    // 雨水 (2/18) and 惊蛰 (3/5) are real solar terms the sample omits; the
+    // festival cells and the whole layout match.
     for fragment in ["春节", "2/17", "元宵", "3/18", "三十"] {
         assert!(grid.contains(fragment), "expected {fragment} in:\n{grid}");
     }
@@ -257,4 +257,41 @@ fn small_years_parse() {
     assert!(run(&["date", "-d", "1-01-01"]).starts_with("公历：1年1月1日 星期六"));
     assert!(run(&["date", "-d", "999-12-31"]).starts_with("公历：999年12月31日"));
     assert!(run(&["date", "-d", "9999-12-31"]).starts_with("公历：9999年12月31日"));
+}
+
+#[test]
+fn solar_terms_and_festivals_sit_on_the_days_the_astronomy_gives() {
+    // Each of these cells is checked by date, not by copying a sample grid.
+    let cases: &[(&[&str], &str)] = &[
+        (&["cal", "2026", "9"], "白露"),   // 处暑/白露/秋分 2026
+        (&["cal", "2026", "9"], "秋分"),
+        (&["cal", "2026", "9"], "中秋"),   // 八月十五 = 2026-09-25
+        (&["cal", "-L", "2026", "7"], "处暑"), // 2026-08-23
+        (&["cal", "-L", "2026", "7"], "中元"), // 七月十五 = 2026-08-27
+        (&["cal", "-L", "2026", "7"], "白露"), // 2026-09-07
+        (&["cal", "-L", "2026", "7"], "七夕"), // 2026-08-19
+        (&["cal", "-L", "2020", "4", "-R"], "芒种"), // 2020-06-05
+        (&["cal", "-L", "2026", "1"], "春节"),  // 2026-02-17
+        (&["cal", "-L", "2026", "1"], "元宵"),  // 2026-03-03
+        (&["cal", "-L", "2026", "1"], "雨水"),  // 2026-02-18
+        (&["cal", "-L", "2026", "1"], "惊蛰"),  // 2026-03-05
+    ];
+    for (args, expected) in cases {
+        let grid = run(args);
+        assert!(grid.contains(expected), "expected {expected} in `lunar {}`:\n{grid}", args.join(" "));
+    }
+}
+
+#[test]
+fn zhongyuan_is_shown_on_the_lunar_seventh_full_moon() {
+    // 中元 is 七月十五 = 2026-08-27; the published sample puts it on 9/6.
+    let grid = run(&["cal", "-L", "2026", "7"]);
+    let lines: Vec<&str> = grid.lines().collect();
+    let row = lines.iter().position(|line| line.contains("8/27")).expect("a row holding 8/27");
+    let dates = lines[row].split_whitespace().collect::<Vec<_>>();
+    let column = dates.iter().position(|cell| *cell == "8/27").expect("the 8/27 cell");
+    let content: Vec<&str> = lines[row + 1].split_whitespace().collect::<Vec<_>>();
+    assert_eq!(content[column], "中元", "the 8/27 cell must carry 中元:\n{}", lines[row + 1]);
+    // And nowhere else in the month.
+    assert_eq!(grid.matches("中元").count(), 1);
 }
