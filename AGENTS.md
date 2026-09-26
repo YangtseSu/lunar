@@ -449,15 +449,25 @@ engine to match a sample.** (The 中元 entry is why the cell now reads 中元�
 the sample is early, and the tool follows the engine.)
 
 **Beyond pinning layouts, the suite pins an invariant** a renderer can easily
-break: that every month of the year shows every one of its days, in order
-(`civil_grid_shows_every_day_of_the_month`).
+break: that a month shows every one of its days, in order
+(`civil_grid_shows_every_day_of_the_month`). The sweep runs over 1, 100, 1300,
+1500, 1582, 2026 and 9999 — the Julian Februaries, the reform month, and both
+ends of the range — and it **asks the binary** which days exist rather than
+deriving `1..=length`. That is the rule for the whole suite: the engine's
+calendar is not the Gregorian one, so a test that computes a month length
+locally disagrees with the tool on 384 Februaries, and `1..=length` cannot
+state October 1582 at all — its 21 days are numbered 1, 2, 3, 4, 15 … 31.
+`calendar::existing_days` is the shape to copy.
 
 **Coverage gaps to be aware of when editing `src/datestr.rs`:** the epoch, keyword, relative
 and weekday paths were uncovered until `day_relative_forms_are_unaffected_by_the_calendar_flag`
 added them, and the **zone** path (`±hh:mm`, `Z`) was uncovered for as long as `zone_offset`
 could not see a sign — a test would have pinned a broken behaviour, so none was written until
-the off-by-one was fixed. `a_numeric_zone_offset_is_accepted_and_shifts_the_day` covers it now.
-The bare-year form is still uncovered. A change to that needs a test you add yourself.
+the off-by-one was fixed. `a_numeric_zone_offset_is_accepted_and_shifts_the_day` covers it now,
+and `an_impossible_zone_offset_is_refused` and `an_epoch_is_truncated_towards_zero` pin the two
+ways each can be wrong — a silently applied nonsense offset, and a flooring division that put
+every timestamp before the epoch a day early. The bare-year form is still uncovered. A change
+to that needs a test you add yourself.
 
 ## Known Defects (verified, not yet fixed)
 
