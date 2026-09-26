@@ -1451,6 +1451,49 @@ fn unsupported_date_strings_are_reported() {
     assert!(run_failing(&["date", "-d", "definitely not a date"]).contains("无法解析"));
 }
 
+/// A multi-byte character in a fixed-width date field is a bad date, not a
+/// crash.
+///
+/// The grammar is matched on **bytes** — `bytes[4]` is the first separator —
+/// and then sliced as a `&str` at that offset, so any character straddling
+/// one panicked with "end byte index 10 is not a char boundary" and exit
+/// 101. Every form is now read through a helper that checks the boundary and
+/// the digits, and answers `无法解析的日期` like any other input it has no
+/// reading for.
+#[test]
+fn a_multi_byte_character_in_a_date_field_is_reported_not_fatal() {
+    for form in [
+        "2026-09-中",
+        "2026-09-0中",
+        "2026-09-中5",
+        "2026-09-甲",
+        "2026-中-07",
+        "2026/09/中",
+        "2026090中",
+        "20260907中",
+        "中2026-09-07",
+    ] {
+        assert!(
+            run_failing(&["date", "-d", form]).contains("无法解析的日期"),
+            "`-d {form}` is reported, not fatal"
+        );
+    }
+    // The forms that *are* dates keep working, in both calendars.
+    for form in [
+        "2026-09-07",
+        "20260907",
+        "2026/09/07",
+        "2026-09-07T15:30",
+        "2026-09-07Z",
+    ] {
+        assert_eq!(
+            run(&["date", "-d", form, "-f", "%Y-%m-%d"]),
+            "2026-09-07",
+            "`-d {form}` is still 2026-09-07"
+        );
+    }
+}
+
 #[test]
 fn help_format_lists_the_tokens() {
     let help = run(&["date", "--help-format"]);

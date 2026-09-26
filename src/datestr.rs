@@ -63,6 +63,23 @@ fn invalid(input: &str) -> CalError {
     }
 }
 
+/// The ASCII digits in `text[at..until]`, or `None` if that span is not
+/// entirely them.
+///
+/// Every absolute form is a fixed-width date, and the grammar is matched on
+/// **bytes** — `bytes[4]` is the first separator, and so on. Slicing a `&str`
+/// at one of those offsets panics when a multi-byte character straddles it, so
+/// `2026-09-中` was a crash rather than a bad date. A byte range that is not
+/// all digits has no reading in the grammar, and `None` says so; `get` makes
+/// the boundary check explicit rather than a panic waiting for a user.
+fn digits(text: &str, at: usize, until: usize) -> Option<&str> {
+    let field = text.get(at..until)?;
+    match field.bytes().all(|byte| byte.is_ascii_digit()) {
+        true => Some(field),
+        false => None,
+    }
+}
+
 /// Which calendar the absolute shapes of a `-d` string are written in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Calendar {
@@ -161,14 +178,16 @@ fn parse_absolute(
 
     let input = text;
     // YYYYMMDD, optionally followed by a time part: 20260907T1530
-    if bytes.len() >= 8 && bytes[..8].iter().all(u8::is_ascii_digit) {
+    if let (Some(year), Some(month), Some(day)) =
+        (digits(text, 0, 4), digits(text, 4, 6), digits(text, 6, 8))
+    {
         let parts = Parts {
-            year: number(&text[0..4], input)?,
-            month: number(&text[4..6], input)?,
-            day: number(&text[6..8], input)?,
+            year: number(year, input)?,
+            month: number(month, input)?,
+            day: number(day, input)?,
         };
-        let rest = lower.strip_prefix(&lower[..8]);
-        return finish(parts, rest.unwrap_or(""), calendar, input).map(Some);
+        let rest = lower.get(8..).unwrap_or_default();
+        return finish(parts, rest, calendar, input).map(Some);
     }
 
     // MM/DD/YYYY, the US order `date(1)` uses. This is tried *before* the
@@ -217,12 +236,18 @@ fn parse_absolute(
 
     // YYYY-MM-DD / YYYY/MM/DD, with the same separator in both positions.
     if bytes.len() >= 10 && (bytes[4] == b'-' || bytes[4] == b'/') && bytes[7] == bytes[4] {
-        let parts = Parts {
-            year: number(&text[0..4], input)?,
-            month: number(&text[5..7], input)?,
-            day: number(&text[8..10], input)?,
+        let parts = match (digits(text, 0, 4), digits(text, 5, 7), digits(text, 8, 10)) {
+            (Some(year), Some(month), Some(day)) => Parts {
+                year: number(year, input)?,
+                month: number(month, input)?,
+                day: number(day, input)?,
+            },
+            // The separators are in place but a field is not ASCII digits —
+            // a multi-byte character in the day, say. The grammar has no
+            // reading for that, so it is a bad date rather than a crash.
+            _ => return Err(invalid(input)),
         };
-        return finish(parts, &lower[10..], calendar, input).map(Some);
+        return finish(parts, lower.get(10..).unwrap_or_default(), calendar, input).map(Some);
     }
 
     // A bare year keeps the reference's month and day, read in the same
