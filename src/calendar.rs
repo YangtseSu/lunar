@@ -402,6 +402,25 @@ pub fn lunar_month_start(month: &LunarMonth) -> CivilDate {
     CivilDate::new(first.year(), first.month(), first.day())
 }
 
+/// Every civil day of a lunar month, in order.
+///
+/// Asked of the engine rather than stepped locally: the engine's calendar is
+/// not the proleptic one before 1600 and it skips the ten reform days of
+/// October 1582, so a local `add_days` walk drifts a day per Julian February
+/// and walks straight into the gap. A grid has to draw the days the month
+/// *has*, and since a cell's content is derived from the same lookup, the
+/// date band and the content band cannot disagree.
+pub fn lunar_month_days(month: &LunarMonth) -> Vec<CivilDate> {
+    month
+        .get_days()
+        .iter()
+        .map(|lunar| {
+            let solar = lunar.solar();
+            CivilDate::new(solar.year(), solar.month(), solar.day())
+        })
+        .collect()
+}
+
 /// Looks up one month of a lunar year by its number (`-4` is the leap fourth
 /// month), or `None` when the year has no such month.
 pub fn lunar_year_month(year: &LunarYear, month: i32) -> Option<LunarMonth> {

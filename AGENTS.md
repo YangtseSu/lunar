@@ -470,8 +470,19 @@ of unrelated work — surface them, or fix them deliberately with a test.
   (`CivilDate::nth_existing_day`) instead of adding days, because the engine counts 21 days
   in that month and 31 in a proleptic one. The gap leaves no hole in the week: 4 October is
   a Thursday and the 15th a Friday, in adjacent columns, which is what the engine's own
-  `week()` says. A **lunar** month still steps normally — the engine already counts its days
-  in days that exist.
+  `week()` says.
+- ~~**The same hybrid calendar split the lunar grid in two.**~~ **Fixed.** The argument
+  above — "a lunar month steps normally, the engine already counts its days in days that
+  exist" — held for the month *length* and not for the *step*. `Grid::lunar` drew its date
+  band with `add_days`, proleptic-Gregorian arithmetic, while the content band and the
+  length came from the engine, which uses the **Julian** leap rule below 1600
+  (`solar_util::is_leap_year`) and skips the reform days. Two calendars in one grid:
+  `cal -L 1300 2` drew 36 cells for a 30-day month, six of them contradicting `lunar date`
+  for the same day, and closed on the *next* month's 初一 — 399 Februaries are affected. A
+  lunar month starting 9/17 also stepped straight into 1582-10-05, so `cal -L 1582 9` and
+  the whole lunar year died with `YearMissing`. Both views now enumerate the days the
+  month has (`calendar::lunar_month_days` for a lunar month), and a cell's label and its
+  content are two readings of the **same** engine answer, so they cannot drift.
 - ~~**`CalError::TodayOutOfRange` overloaded four unrelated failures.**~~ **Fixed.** An
   unparsable `TZ`, a missing `/etc/localtime`, a clock before 1970 and a local year outside
   1–9999 all printed `当前日期超出支持范围 (1–9999 年)`, so a typo'd `TZ` was answered with a

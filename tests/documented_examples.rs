@@ -1318,6 +1318,134 @@ fn the_reform_gap_renders_as_absent_days() {
     assert!(run(&["cal", "1582", "11"]).contains("1582年11月"));
 }
 
+/// The lunar view's date band is the engine's own, day for day.
+///
+/// It used to be stepped with `add_days` — proleptic-Gregorian arithmetic —
+/// while the content band and the month length came from the engine, which
+/// uses the Julian leap rule before 1600 and skips the reform days of 1582.
+/// Two calendars in one grid: `cal -L 1300 2` drew 36 cells for a 30-day
+/// month, 6 of them contradicting `lunar date`, and ended on the *next*
+/// month's 初一. This pins the first and the last label to the day the engine
+/// converts the same lunar day to, which is the only claim that can fail when
+/// the two calendars drift.
+#[test]
+fn the_lunar_view_labels_the_days_the_engine_converts() {
+    for (year, month) in [
+        ("1", "1"),
+        ("100", "2"),
+        ("1300", "2"),
+        ("1582", "9"),
+        ("2026", "7"),
+    ] {
+        let grid = run(&["cal", "-L", year, month]);
+        let labels: Vec<&str> = grid
+            .lines()
+            .skip(2)
+            .step_by(2)
+            .filter(|line| !line.trim().is_empty())
+            .flat_map(|line| line.split_whitespace())
+            .filter(|label| label.contains('/'))
+            .collect();
+
+        // The month may be 29 or 30 days. Ask the engine which rather than
+        // assuming a length: day 30 either answers or says the month is
+        // shorter, and either way it is the engine's own answer.
+        let last = {
+            let output = binary()
+                .args(["date", "-l", year, month, "30"])
+                .output()
+                .expect("lunar runs");
+            if output.status.success() {
+                "30"
+            } else {
+                let error = String::from_utf8_lossy(&output.stderr);
+                assert!(
+                    error.contains("没有第 30 天"),
+                    "`date -l {year} {month} 30` failed: {error}"
+                );
+                "29"
+            }
+        };
+        let first = run(&["date", "-l", year, month, "1"]);
+        let first = first.lines().next().expect("a 公历 line");
+        let last = run(&["date", "-l", year, month, last]);
+        let last = last.lines().next().expect("a 公历 line");
+
+        let month_and_day = |line: &str| {
+            // The line is `公历: 2026年9月10日 星期四`, and the prefix has a
+            // space of its own, so the date ends at the last space.
+            let (ymd, _) = line.rsplit_once(' ').expect("公历: <date> <weekday>");
+            let (_, rest) = ymd.split_once('年').expect("年 月日");
+            let (month, day) = rest.split_once('月').expect("月 日");
+            format!("{month}/{}", day.trim_end_matches('日'))
+        };
+        assert_eq!(
+            labels.first().copied(),
+            Some(month_and_day(first).as_str()),
+            "`cal -L {year} {month}` starts on the day the engine gives:\n{grid}"
+        );
+        assert_eq!(
+            labels.last().copied(),
+            Some(month_and_day(last).as_str()),
+            "`cal -L {year} {month}` ends on the day the engine gives:\n{grid}"
+        );
+    }
+}
+
+/// A lunar month that spans the reform gap renders, and skips the ten days.
+///
+/// The same hybrid calendar took the whole command down: 九月 1582 starts
+/// 9/17, so stepping its thirty days ran into 1582-10-05 and `to_solar`
+/// answered `YearMissing`, killing `cal -L 1582 9` and the whole lunar year
+/// with it. Enumerating the days the month has leaves no gap to fall into —
+/// the 4th and the 15th sit in adjacent columns, exactly as the civil view
+/// does.
+#[test]
+fn a_lunar_month_spanning_the_reform_gap_renders() {
+    let grid = run(&["cal", "-L", "1582", "9"]);
+    let labels: Vec<&str> = grid
+        .lines()
+        .skip(2)
+        .step_by(2)
+        .filter(|line| !line.trim().is_empty())
+        .flat_map(|line| line.split_whitespace())
+        .collect();
+    assert_eq!(labels.first(), Some(&"9/17"), "九月 starts 9/17:\n{grid}");
+    assert_eq!(labels.last(), Some(&"10/25"), "九月 has 29 days:\n{grid}");
+    // The 4th and the 15th are consecutive days, so they share a week row.
+    let lines: Vec<&str> = grid.lines().collect();
+    let row_of = |label: &str| {
+        let at = lines
+            .iter()
+            .position(|line| line.split_whitespace().any(|cell| cell == label))
+            .unwrap_or_else(|| panic!("no cell labelled {label}:\n{grid}"));
+        let cell = lines[at]
+            .split_whitespace()
+            .position(|cell| cell == label)
+            .expect("the label is a cell");
+        (at, cell)
+    };
+    let (row_four, cell_four) = row_of("10/4");
+    let (row_fifteen, cell_fifteen) = row_of("10/15");
+    assert_eq!(
+        row_fifteen, row_four,
+        "the 4th and the 15th share a week row:\n{grid}"
+    );
+    assert_eq!(
+        cell_fifteen,
+        cell_four + 1,
+        "the 4th and the 15th are in adjacent columns:\n{grid}"
+    );
+    for day in 5..=14 {
+        assert!(
+            !grid.contains(&format!("10/{day} ")) && !grid.contains(&format!(" 10/{day}\n")),
+            "1582-10-{day} does not exist and has no cell:\n{grid}"
+        );
+    }
+    // The whole lunar year renders for the same reason.
+    assert_eq!(run(&["cal", "-L", "1582"]).matches("农历").count(), 12);
+}
+
 #[test]
 fn unsupported_date_strings_are_reported() {
     assert!(run_failing(&["date", "-d", "definitely not a date"]).contains("无法解析"));

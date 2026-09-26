@@ -55,12 +55,12 @@ const GUTTER: usize = 2;
 struct Month {
     /// Title line of the grid.
     title: String,
-    /// Day 1 of the month.
-    first: CivilDate,
+    /// The days the month has, in order. Asked of the calendar the tool serves,
+    /// never stepped locally: that calendar is not the proleptic one before
+    /// 1600 and it skips the ten reform days of October 1582.
+    days: Vec<CivilDate>,
     /// Blank cells before day 1.
     lead: usize,
-    /// Days in the month.
-    count: usize,
     /// Whether cells lead with a civil `M/D` rather than a day of month.
     lunar_view: bool,
     /// 0 = Sunday, 1 = Monday.
@@ -82,18 +82,20 @@ struct Entry {
 /// A run of consecutive days forming one grid.
 pub struct Grid {
     title: String,
-    days: Vec<Entry>,
+    entries: Vec<Entry>,
     column: usize,
     week_start: i32,
     /// Whether SGR escapes are emitted.
     color: bool,
 }
-
 impl Grid {
     /// Grid for one lunar month.
     ///
     /// The lunar view keeps weekday alignment: day 1 of the month sits in the
-    /// column of its weekday, and the days before it are left blank.
+    /// column of its weekday, and the days before it are left blank. Both the
+    /// day and its lead come from the engine, so the date band and the content
+    /// band are two readings of one answer — see [`calendar::lunar_month_days`]
+    /// for why the days are enumerated rather than stepped.
     pub fn lunar(
         title: String,
         month: LunarMonth,
@@ -104,13 +106,11 @@ impl Grid {
     ) -> Result<Self, CalError> {
         let first = calendar::lunar_month_start(&month);
         let lead = (first.weekday() - week_start).rem_euclid(7) as usize;
-        let count = month.get_day_count() as usize;
         Self::build(
             Month {
                 title,
-                first,
+                days: calendar::lunar_month_days(&month),
                 lead,
-                count,
                 lunar_view: true,
                 week_start,
             },
@@ -130,14 +130,24 @@ impl Grid {
         today: CivilDate,
         color: Color,
     ) -> Result<Self, CalError> {
+        let first = CivilDate::new(year, month, 1);
         let count = calendar::days_in_civil_month(year, month) as usize;
-        let lead = calendar::week_offset(year, month, week_start);
+        let mut days = Vec::with_capacity(count);
+        for index in 0..count {
+            // A civil month is enumerated, not stepped: the engine's calendar
+            // has fewer days than a proleptic one — October 1582 is 31 days by
+            // arithmetic and 21 on the calendar, and the ten reform days have
+            // no cell to draw.
+            let Some(date) = first.nth_existing_day(index) else {
+                break;
+            };
+            days.push(date);
+        }
         Self::build(
             Month {
                 title,
-                first: CivilDate::new(year, month, 1),
-                lead,
-                count,
+                days,
+                lead: calendar::week_offset(year, month, week_start),
                 lunar_view: false,
                 week_start,
             },
@@ -149,9 +159,9 @@ impl Grid {
 
     /// Fills whole weeks starting at the month's first day.
     ///
-    /// `first` is day 1 of the month; slot `lead` holds it and the slots
-    /// before and after the month are blank padding. Every day of the month
-    /// gets exactly one slot, so the last day is never dropped.
+    /// The month's days are already enumerated; slot `lead` holds the first of
+    /// them and the slots before and after are blank padding. Every day of the
+    /// month gets exactly one slot, so the last day is never dropped.
     fn build(
         spec: Month,
         style: CellStyle,
@@ -160,40 +170,18 @@ impl Grid {
     ) -> Result<Self, CalError> {
         let Month {
             title,
-            first,
+            days,
             lead,
-            count,
             lunar_view,
             week_start,
         } = spec;
-        let slots = (lead + count).div_ceil(7) * 7;
-        let mut days = Vec::with_capacity(slots);
+        let slots = (lead + days.len()).div_ceil(7) * 7;
+        let mut entries = Vec::with_capacity(slots);
         for index in 0..slots {
-            let offset = index as i64 - lead as i64;
-            let in_month = offset >= 0 && (offset as usize) < count;
-            let (label, content, mark) = match in_month {
-                true => {
-                    // A *civil* month is stepped by its own days, and the
-                    // engine's calendar has fewer of them than a proleptic
-                    // one — October 1582 is 31 days by arithmetic and 21 on
-                    // the calendar, and the ten reform days have no cell to
-                    // draw. A *lunar* month is already counted by the engine
-                    // in days that exist, so it steps normally.
-                    let date = match lunar_view {
-                        true => first.add_days(offset),
-                        false => match first.nth_existing_day(offset as usize) {
-                            Some(date) => date,
-                            None => {
-                                days.push(Entry {
-                                    label: String::new(),
-                                    content: String::new(),
-                                    in_month: false,
-                                    mark: Mark::default(),
-                                });
-                                continue;
-                            }
-                        },
-                    };
+            // A slot before the lead is padding; from the lead on, slot `n`
+            // holds the month's `n - lead`-th day.
+            let entry = match index.checked_sub(lead).and_then(|nth| days.get(nth)) {
+                Some(&date) => {
                     let solar = date.to_solar()?;
                     let lunar = solar.lunar();
                     let label = match lunar_view {
@@ -207,21 +195,26 @@ impl Grid {
                         true => cell::lunar_month_content(&solar, &lunar, style),
                         false => cell::content(&solar, &lunar, style),
                     };
-                    (label, content, mark)
+                    Entry {
+                        label,
+                        content,
+                        in_month: true,
+                        mark,
+                    }
                 }
-                false => (String::new(), String::new(), Mark::default()),
+                None => Entry {
+                    label: String::new(),
+                    content: String::new(),
+                    in_month: false,
+                    mark: Mark::default(),
+                },
             };
-            days.push(Entry {
-                label,
-                content,
-                in_month,
-                mark,
-            });
+            entries.push(entry);
         }
-        let column = column_width(&days, week_start);
+        let column = column_width(&entries, week_start);
         Ok(Self {
             title,
-            days,
+            entries,
             column,
             week_start,
             color: color.enabled(),
@@ -233,7 +226,7 @@ impl Grid {
         let _ = writeln!(out, "{}", self.title);
         let _ = writeln!(out, "{}", self.header());
 
-        for chunk in self.days.chunks(7) {
+        for chunk in self.entries.chunks(7) {
             if chunk.iter().all(|entry| !entry.in_month) {
                 continue;
             }
