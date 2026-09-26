@@ -1025,6 +1025,50 @@ fn sunday_first_shifts_only_the_columns() {
     }
 }
 
+/// `-m` / `--monday` is a real option, not a parsed-and-dropped one.
+///
+/// It arrived with `let _ = monday;` in the dispatch, so asking for Monday
+/// did nothing at all — and since Monday is the default the output was
+/// already right, which is why nothing ever noticed. The flag now names the
+/// first column in both views, and it is declared mutually exclusive with
+/// `-s` rather than silently losing to it.
+#[test]
+fn the_monday_flag_names_the_first_column() {
+    for args in [
+        ["cal", "2026", "9", "-m"].as_slice(),
+        ["cal", "2026", "9", "--monday"].as_slice(),
+        ["cal", "-L", "2026", "7", "-m"].as_slice(),
+    ] {
+        assert!(
+            run(args).lines().nth(1).unwrap().starts_with('一'),
+            "`lunar {}` starts the week on Monday",
+            args.join(" ")
+        );
+    }
+    // Monday is the default, so the flag changes nothing about the output.
+    assert_eq!(run(&["cal", "2026", "9", "-m"]), run(&["cal", "2026", "9"]));
+    // `-s` still wins the other way, and the two together are refused rather
+    // than one silently overwriting the other.
+    assert!(
+        run(&["cal", "2026", "9", "-s"])
+            .lines()
+            .nth(1)
+            .unwrap()
+            .starts_with('日')
+    );
+    for args in [
+        ["cal", "2026", "9", "-s", "-m"].as_slice(),
+        ["cal", "2026", "9", "-m", "-s"].as_slice(),
+    ] {
+        let output = binary().args(args).output().expect("lunar runs");
+        assert!(
+            !output.status.success(),
+            "`lunar {}` must be refused, not silently resolved",
+            args.join(" ")
+        );
+    }
+}
+
 #[test]
 fn lunar_month_grid_has_the_documented_layout() {
     let expected = r#"农历 丙午年 七月

@@ -88,11 +88,11 @@ enum Command {
         leap: bool,
 
         /// 周日作为一周第一天
-        #[arg(short = 's', long = "sunday")]
+        #[arg(short = 's', long = "sunday", conflicts_with = "monday")]
         sunday: bool,
 
         /// 周一作为一周第一天（默认）
-        #[arg(short = 'm', long = "monday")]
+        #[arg(short = 'm', long = "monday", conflicts_with = "sunday")]
         monday: bool,
 
         /// 整年(缺省当前年)
@@ -189,8 +189,6 @@ fn main() -> ExitCode {
             no_color,
             positional,
         } => {
-            // `-m` is the default; `-s` is what actually changes the first column.
-            let _ = monday;
             // The last flag on the command line wins, so `--color --no-color`
             // is never, and `--no-color --color` always.
             let color = match (color, no_color) {
@@ -203,7 +201,9 @@ fn main() -> ExitCode {
                     positional: positional.clone(),
                     lunar: *lunar,
                     leap: *leap,
-                    sunday: *sunday,
+                    // `-m` is the default, so it only has to *clear* `-s`;
+                    // clap rejects the two together.
+                    sunday: *sunday && !monday,
                     year: *year,
                     three: *three,
                     months: *months,

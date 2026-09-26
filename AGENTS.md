@@ -509,8 +509,11 @@ of unrelated work — surface them, or fix them deliberately with a test.
   `select_lunar_months` calls `check_lunar_month` before the lookup, and `m_abs` range-checks
   on its own account, so no input reaches the `lunar_util::MONTH` index unchecked.
 - `-3` / `-n N` are silently ignored under `-L` whenever a positional is present.
-- `src/main.rs` parses `-m/--monday` and discards it; Monday is hard-coded. The README
-  options table implies otherwise.
+- ~~**`src/main.rs` parses `-m/--monday` and discards it.**~~ **Fixed.** It reached the
+  dispatch as `let _ = monday;` and did nothing, and because Monday *is* the default the
+  output was already right — which is why nothing noticed. It now names the first column in
+  both views, and the two first-column flags are declared mutually exclusive so `-s -m` is
+  refused rather than one silently overwriting the other.
 - **The 法定节假日 table stops at 2026.** `lunar-rs` ships 2001–2026, so a grid outside
   that window shows festivals and no statutory marks: `cal 2027 1` reads 廿五 for 2
   January, not 放假, and `cal 2000 1` reads 廿六 for 2 January. It is a data limit
