@@ -73,7 +73,7 @@ impl CalError {
                 format!("公历 {year}-{month:02}-{day:02} 不存在")
             }
             Self::NoSuchLunarMonth { year, month } => {
-                format!("农历 {year} 年没有{}月", m_abs(*month))
+                format!("农历 {year} 年没有{}", m_abs(*month))
             }
             Self::NoLeapMonth { year } => format!("农历 {year} 年没有闰月"),
             Self::LunarDayOutOfRange {
