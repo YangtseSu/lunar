@@ -468,11 +468,14 @@ of unrelated work — surface them, or fix them deliberately with a test.
   but each slot is validated with `to_solar()`, so a month whose slot window crosses the
   reform gap dies with the `YearMissing` message. Verified: `cal 1582 10` errors, while
   `cal 1582 9` and `cal 1582 11` render fine.
-- `CalError::TodayOutOfRange` overloads four unrelated failures — an unparsable `TZ`, a
-  missing `/etc/localtime`, a clock before 1970, and a local year outside 1–9999
-  (`src/tz.rs:19,21,33,36`; `src/calendar.rs:120`) — all printing
-  `当前日期超出支持范围 (1–9999 年)`. Verified: `TZ=Asia/Shangahi lunar date` reports a
-  date-range problem, not a bad zone.
+- ~~**`CalError::TodayOutOfRange` overloaded four unrelated failures.**~~ **Fixed.** An
+  unparsable `TZ`, a missing `/etc/localtime`, a clock before 1970 and a local year outside
+  1–9999 all printed `当前日期超出支持范围 (1–9999 年)`, so a typo'd `TZ` was answered with a
+  statement about the calendar, sent to a reader whose calendar was fine. The zone failures
+  are now `CalError::BadTimeZone { source }` — naming `TZ` or 系统时区 — and the clock is
+  `CalError::ClockBeforeEpoch`. `TodayOutOfRange` itself had no constructor left once the
+  year check went through `check_year` (`YearOutOfRange`), so it is gone rather than kept
+  for a case that cannot occur.
 - ~~**`-d` rejects numeric zone offsets.**~~ **Fixed.** `split_zone` returned a slice
   starting one byte *before* the sign (`&rest[index - 1..]`), so `zone_offset`'s
   `bytes.first()` never saw `+`/`-`. `Z`/`UTC`/`GMT` worked, which is why only the numeric

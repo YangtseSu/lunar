@@ -43,8 +43,11 @@ pub enum CalError {
     NoLeapMonth { year: i32 },
     /// A `-d` string could not be parsed.
     UnparsableDate { input: String },
-    /// The current local date is outside the supported window.
-    TodayOutOfRange,
+    /// `TZ` names a zone `tz-rs` cannot parse, or the system zone is
+    /// unreadable. Carries which of the two it was.
+    BadTimeZone { source: &'static str },
+    /// The system clock reads before the Unix epoch.
+    ClockBeforeEpoch,
     /// A lunar day that does not exist in the requested lunar month.
     LunarDayOutOfRange {
         year: i32,
@@ -97,7 +100,8 @@ impl CalError {
                 format!("日期偏移单位 {unit} 不足一天，本工具只输出日期")
             }
             Self::UnparsableDate { input } => format!("无法解析的日期: {input}"),
-            Self::TodayOutOfRange => "当前日期超出支持范围 (1–9999 年)".to_string(),
+            Self::BadTimeZone { source } => format!("无法读取时区: {source}"),
+            Self::ClockBeforeEpoch => "系统时钟早于 1970-01-01".to_string(),
         }
     }
 }

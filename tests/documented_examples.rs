@@ -258,6 +258,22 @@ fn run_failing(args: &[&str]) -> String {
         .to_string()
 }
 
+/// Runs `lunar <args…>` with `TZ` set, expecting failure, and returns stderr.
+fn run_failing_with_tz(tz: &str, args: &[&str]) -> String {
+    let output = binary()
+        .args(args)
+        .env("TZ", tz)
+        .output()
+        .expect("lunar runs");
+    assert!(
+        !output.status.success(),
+        "lunar {args:?} unexpectedly succeeded with TZ={tz}"
+    );
+    String::from_utf8_lossy(&output.stderr)
+        .trim_end()
+        .to_string()
+}
+
 /// The text a cell of a grid shows, found by its label.
 ///
 /// Cells are located on the grid's **pitch**, not by splitting on
@@ -1212,6 +1228,26 @@ fn help_format_lists_the_tokens() {
     assert!(help.contains("\\n 换行"));
 }
 
+/// A zone the engine cannot read is reported as a zone problem.
+///
+/// `TZ`, an unreadable system zone, a clock before 1970 and a local year
+/// outside 1–9999 all raised `TodayOutOfRange`, so a typo'd `TZ` was
+/// answered with 当前日期超出支持范围 — a statement about the calendar, sent
+/// to a reader whose calendar was fine. Each is its own error now.
+#[test]
+fn a_bad_time_zone_is_reported_as_a_zone_problem() {
+    for tz in ["Asia/Shangahi", "Not/AZone", "!!!"] {
+        let error = run_failing_with_tz(tz, &["date"]);
+        assert!(
+            error.contains("无法读取时区"),
+            "TZ={tz} reports a zone problem, got: {error}"
+        );
+        assert!(
+            !error.contains("超出支持范围"),
+            "TZ={tz} must not blame the date range, got: {error}"
+        );
+    }
+}
 #[test]
 fn a_bare_year_prints_the_whole_year() {
     // A single positional argument means the whole year.
