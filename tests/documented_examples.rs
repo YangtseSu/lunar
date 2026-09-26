@@ -901,6 +901,21 @@ fn leap_month_is_only_reachable_with_the_leap_flag() {
     assert!(run_failing(&["cal", "-L", "2021", "4", "-R"]).contains("没有闰月"));
 }
 
+/// A lunar month outside `1..=12` is reported, not indexed.
+///
+/// The month is a table lookup on the way to the error message, so `0`, `13`
+/// and `i32::MIN` used to panic instead of failing — an exit code of 101
+/// rather than 1. `--` passes a negative number past clap's own parser.
+#[test]
+fn out_of_range_lunar_months_are_reported_not_indexed() {
+    for month in ["0", "13", "-13", "-2147483648"] {
+        assert!(
+            run_failing(&["cal", "-L", "2026", "--", month]).contains("农历月份"),
+            "lunar month {month} is reported as out of range"
+        );
+    }
+}
+
 #[test]
 fn out_of_range_years_are_rejected() {
     assert!(run_failing(&["cal", "10000", "1"]).contains("超出支持范围"));

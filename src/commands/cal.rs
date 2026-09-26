@@ -188,6 +188,11 @@ fn select_lunar_months(
     let all = calendar::lunar_year_months(year);
 
     if args.positional.len() >= 2 {
+        // The month is user-supplied here, and its Chinese name is a table
+        // lookup, so `0` or `13` would index past the end of the table and
+        // panic. Validate it before anything reads it — the check also
+        // rejects `i32::MIN`, whose `abs()` would overflow below.
+        calendar::check_lunar_month(month)?;
         let wanted = if args.leap { -month.abs() } else { month };
         return match calendar::lunar_year_month(year, wanted) {
             Some(found) => Ok(vec![found]),
