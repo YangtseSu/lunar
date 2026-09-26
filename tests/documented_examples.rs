@@ -605,6 +605,62 @@ fn colour_adds_escapes_and_nothing_else() {
     );
 }
 
+/// `--color` and `--no-color` each override the other, so the one written
+/// last decides, and `--color` takes `auto` / `always` / `never` like
+/// `cal(1)`'s.
+///
+/// Both flags were booleans matched with `(true, _) => Always` ahead of
+/// `(false, true) => Never`, so they no longer carried the order they were
+/// written in: `--color --no-color` coloured, and a comment claimed the
+/// opposite. `overrides_with` on both sides keeps the order; `require_equals`
+/// keeps `--color` from eating the year that follows it.
+#[test]
+fn the_color_flags_take_the_last_word() {
+    let marked = |args: &[&str]| run(args).contains('\u{1b}');
+    // `2026 10` is the 国庆 statutory week and `-L 2026 1` the 春节 one, so
+    // each view has something to paint: a `never` that is vacuously true
+    // would pass the same check.
+    let october = |flags: &[&str]| {
+        let mut args = vec!["cal", "2026", "10"];
+        args.extend_from_slice(flags);
+        run(&args).contains('\u{1b}')
+    };
+    let spring = |flags: &[&str]| {
+        let mut args = vec!["cal", "-L", "2026", "1"];
+        args.extend_from_slice(flags);
+        run(&args).contains('\u{1b}')
+    };
+    // Order, in both directions and with the value spelled out.
+    assert!(!october(&["--color", "--no-color"]));
+    assert!(october(&["--no-color", "--color"]));
+    assert!(!october(&["--color=always", "--no-color"]));
+    assert!(october(&["--no-color", "--color=always"]));
+    assert!(!spring(&["--color", "--no-color"]));
+    assert!(spring(&["--no-color", "--color"]));
+    // The three words of `cal(1)`, and the two forms of "never".
+    assert!(!october(&["--color=never"]));
+    assert!(october(&["--color=always"]));
+    // The suite's stdout is a pipe, so `auto` is uncoloured.
+    assert!(!october(&["--color=auto"]));
+    assert!(!october(&[]));
+    assert!(!marked(&["cal", "2026", "10", "--no-color"]));
+    // `--color` is a flag, not a word: the month still parses after it.
+    assert_eq!(
+        run(&["cal", "--color", "2026", "10"]),
+        run(&["cal", "2026", "10", "--color"])
+    );
+    // A word that is none of the three is a parse error, not a silent `auto`.
+    let output = binary()
+        .args(["cal", "2026", "10", "--color=sometimes"])
+        .output()
+        .expect("lunar runs");
+    assert_eq!(output.status.code(), Some(2), "clap refuses the value");
+    assert!(
+        String::from_utf8_lossy(&output.stderr).contains("'sometimes'"),
+        "the refusal names the value"
+    );
+}
+
 /// The profile reports the statutory calendar even in its default form: 放假
 /// and 调休上班 are the one thing about a day the other lines cannot say.
 #[test]

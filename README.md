@@ -236,10 +236,11 @@ $ lunar cal 2026 10
 
 In a terminal, 1–7 October are red and 10 October — a Saturday the State Council
 turned into a workday — is bold bright. **A piped or redirected grid shows no
-mark at all**, since the marks are attributes; `--color` forces the escapes on
-(for `less -R`, `grep --color`) and `--no-color` forces them off. `--no-holiday`
-drops the statutory half of the mark and keeps the reference day's own.
-For a single day, `lunar date` reports the statutory calendar in words.
+mark at all**, since the marks are attributes; `--color=always` forces the
+escapes on (for `less -R`, `grep --color`) and `--no-color` forces them off.
+`--no-holiday` drops the statutory half of the mark and keeps the reference
+day's own. For a single day, `lunar date` reports the statutory calendar in
+words.
 
 `-L` switches to lunar months, where each cell leads with the civil date:
 
@@ -275,7 +276,7 @@ $ lunar cal -L 2026 7
 | `--no-month-name` | never replace 初一 with the month name |
 | `--no-festival` | never show festivals |
 | `--no-holiday` | never mark the statutory calendar (放假 / 调休) |
-| `--color` / `--no-color` | force SGR on or off (default: only when stdout is a terminal) |
+| `--color[=WHEN]` / `--no-color` | `auto` (only when stdout is a terminal) / `always` / `never`; `--no-color` is `--color=never`. Each overrides the other, so the one written last decides. The value needs `=`, as in `--color=always` |
 
 The civil view walks forward from the month named, across year boundaries
 (`cal 2026 12 -n 3` prints 2026年12月, 2027年1月, 2027年2月). The lunar view is
@@ -320,8 +321,6 @@ not features, and are tracked as implementation plans in [`docs/plans`](docs/pla
   centring, `-n N` centres instead of starting at the named month, and `-y`
   shows 12 months from the named month instead of the named year
   (`docs/plans/03`);
-- `--color --no-color` silently means "always colour", and the code comments
-  claim a last-flag-wins rule that is not implemented (`docs/plans/02`).
 
 ## Implementation notes
 

@@ -44,7 +44,7 @@ const TODAY_STYLE: &str = "7";
 /// The SGR that clears the attributes again.
 const RESET: &str = "\x1b[0m";
 
-/// How `--color` / `--no-color` resolve.
+/// How `--color[=WHEN]` / `--no-color` resolve, the `cal(1)` tri-state.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum Color {
     /// Colour when stdout is a terminal. The default.

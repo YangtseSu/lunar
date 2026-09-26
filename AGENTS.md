@@ -139,8 +139,8 @@ Invariants, in the order they are easiest to break:
 - **The statutory calendar is a mark, not a label.** 放假 and 调休 are painted
   (`mark::paint`), never written into the cell: a label there would displace the
   festival name or lunar day, which are the facts the tool exists to print. The
-  cost is stated plainly: a piped grid shows no mark; `--color` is the way out,
-  and `lunar date` reports the statutory calendar in words.
+  cost is stated plainly: a piped grid shows no mark; `--color=always` is the way
+  out, and `lunar date` reports the statutory calendar in words.
 - **The two marks compose; neither wins.** `Mark::sgr` joins the parameters into
   one run — a 放假 reference day is `\x1b[31;7m`. Padding goes *inside* the SGR
   run, so a colourless and a coloured grid differ in trailing spaces only.
@@ -266,8 +266,6 @@ are judged against.
 All verified; each is a plan, not intended behaviour. Fix deliberately; do not
 silently paper over one as a side effect of unrelated work.
 
-- `--color --no-color` always means colour, contradicting the comment that
-  claims last-flag-wins (`docs/plans/02`).
 - `cal` span flags do not match `cal(1)`: `-3` walks forward, `-n N` centres,
   `-y` counts 12 months from the named month (`docs/plans/03`).
 - Long digit runs are claimed by the compact `YYYYMMDD` form, so

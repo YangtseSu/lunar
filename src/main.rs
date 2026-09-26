@@ -126,12 +126,20 @@ enum Command {
         #[arg(long = "no-holiday")]
         no_holiday: bool,
 
-        /// 始终着色(默认只在终端着色)
-        #[arg(long = "color")]
-        color: bool,
+        /// 着色方式：auto(默认)/always/never，后写者胜（取值须用 `=`）
+        #[arg(
+            long = "color",
+            value_name = "WHEN",
+            num_args = 0..=1,
+            require_equals = true,
+            default_missing_value = "always",
+            value_parser = ["auto", "always", "never"],
+            overrides_with = "no_color",
+        )]
+        color: Option<String>,
 
-        /// 不着色
-        #[arg(long = "no-color")]
+        /// 不着色（`--color=never` 的简写）
+        #[arg(long = "no-color", overrides_with = "color")]
         no_color: bool,
 
         /// 位置参数：公历年/公历月，或 -L 农历年/农历月
@@ -199,11 +207,13 @@ fn main() -> ExitCode {
             no_color,
             positional,
         } => {
-            // The last flag on the command line wins, so `--color --no-color`
-            // is never, and `--no-color --color` always.
-            let color = match (color, no_color) {
-                (false, true) => mark::Color::Never,
-                (true, _) => mark::Color::Always,
+            // `--color` and `--no-color` override each other, so only the one
+            // written last survives parsing: `no_color` is true exactly when
+            // it is the last of the two, and an absent `color` is `auto`.
+            let color = match (color.as_deref(), no_color) {
+                (_, true) => mark::Color::Never,
+                (Some("never"), _) => mark::Color::Never,
+                (Some("always"), _) => mark::Color::Always,
                 _ => mark::Color::Auto,
             };
             cal::run(

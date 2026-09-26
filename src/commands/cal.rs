@@ -10,8 +10,9 @@
 //!   extend the range
 //! * `--number`, `--no-month-name`, `--no-festival`, `--no-holiday` change cell
 //!   content
-//! * `--color` / `--no-color` override the automatic SGR of the reference day,
-//!   the 法定节假日 and the 调休 marks
+//! * `--color[=auto|always|never]` / `--no-color` override the automatic SGR of
+//!   the reference day, the 法定节假日 and the 调休 marks; the two override
+//!   each other, so the one written last decides
 
 use std::sync::Arc;
 
@@ -48,7 +49,7 @@ pub struct CalArgs {
     pub no_festival: bool,
     /// `--no-holiday`.
     pub no_holiday: bool,
-    /// `--color` / `--no-color`.
+    /// `--color[=WHEN]` / `--no-color`, already resolved to one mode.
     pub color: Color,
 }
 

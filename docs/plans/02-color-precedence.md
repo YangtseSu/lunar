@@ -1,6 +1,6 @@
 # 计划 02 — `--color` / `--no-color`：注释宣称的"后写者胜"并未实现
 
-Status: 待实施 · Priority: P1 · Depends: 无
+Status: 已实施 · Priority: P1 · Depends: 无
 
 ## 现象
 
@@ -97,3 +97,17 @@ lunar cal 2026 10 --color=auto | cat -v | grep -c '\^['          # 0（管道）
 
 - 不实现 `NO_COLOR` / `CLICOLOR` 环境变量（新特性，另议）；
 - 不改 `mark.rs` 的着色规则与 `Color` 类型本身，只改旗标到 `Color` 的映射。
+
+## 实施记录
+
+`--color` 改为 `Option<String>`，两侧写 `overrides_with`；解析处按
+`(_, true) => Never` / `Some("never")` / `Some("always")` / `_ => Auto` 映射。
+`--color=sometimes` 退出码 2，`--color` 与 `--color=always` 同义。
+
+一处计划外的修正：`num_args = 0..=1` 会把紧跟其后的位置参数当成 `WHEN`，
+`cal --color 2026 10` 因此报 `invalid value '2026'`。补 `require_equals = true`
+后，取值只能写成 `--color=always`，`--color` 恢复为纯旗标。
+
+验收脚本里的 `cat -v | grep -c '\^\['` 数到的 3 行不是 SGR：`cat -v` 把 UTF-8
+的 `0x9B` 显示成 `M-[`，网格里的「五」「九」都含该字节。改用
+`grep -c $'\x1b\['` 才是真的在数转义序列。
