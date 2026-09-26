@@ -488,8 +488,11 @@ of unrelated work — surface them, or fix them deliberately with a test.
   the year 9 with a day of 2026 and then failed validation. The US order is tried **before**
   it, keyed on a four-digit *last* field — which is what distinguishes it from `2026/09/07` —
   and the old fixed-width branch that could never be reached is gone.
-- `20260907T1530` and a bare `2026-09-07Z` both fail — `parse_clock`
-  (`src/datestr.rs:340`) has no compact `HHMM` form and returns `None` for an empty clock.
+- ~~**`20260907T1530` and a bare `2026-09-07Z` both fail.**~~ **Fixed.** `parse_clock`
+  split on `:` only, so the compact `hhmm` form — four digits, no separator, `1530` being
+  15:30 and not the hour 1530 — had nowhere to go; and an empty clock was an error rather
+  than midnight. A zone with no clock now means midnight in that zone, as `date(1)` does.
+  A fourth colon-separated field is now rejected too, which it previously ignored.
 - Sub-day relative units (`90 minutes ago`, `2 hours`) are accepted but are **no-ops**
   (`src/datestr.rs:435-436`).
 - `src/format.rs:20-21` no longer claims `\%` yields a literal `%`; the code emits `\%`

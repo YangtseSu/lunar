@@ -279,7 +279,13 @@ fn finish(
     }
     let date = resolve(parts, calendar)?;
     let (clock, zone) = split_zone(suffix);
-    let time = parse_clock(clock).ok_or_else(|| invalid(input))?;
+    // A zone with no clock is midnight in that zone: `2026-09-07Z` is
+    // 00:00 UTC, and `2026-09-07+08:00` likewise. Only a zone *and* a clock
+    // make the suffix a time of day, so this is not the `-l` case above.
+    let time = match clock.is_empty() {
+        true if zone.is_some() => (0, 0, 0),
+        _ => parse_clock(clock).ok_or_else(|| invalid(input))?,
+    };
     match zone {
         // A zone only matters when it shifts the day; keep the reference's
         // day when it does not, mirroring `date -d "… 23:00 UTC"` in UTC.
@@ -348,10 +354,17 @@ fn zone_offset(zone: &str) -> Option<i64> {
     Some(sign * (hours * 3600 + minutes * 60))
 }
 
-/// Parses `hh`, `hh:mm` and `hh:mm:ss`.
+/// Parses `hh`, `hh:mm`, `hh:mm:ss` and the compact `hhmm`.
+///
+/// The compact form is what `20260907T1530` carries, and it is four digits
+/// with no separator, so it is read before the colon-splitting below — `1530`
+/// is 15:30, not the hour 1530.
 fn parse_clock(text: &str) -> Option<(i32, i32, i32)> {
     if text.is_empty() {
         return None;
+    }
+    if !text.contains(':') && text.len() == 4 && text.bytes().all(|byte| byte.is_ascii_digit()) {
+        return finish_clock(text[0..2].parse().ok()?, text[2..4].parse().ok()?, 0);
     }
     let mut parts = text.split(':');
     let hour: i32 = parts.next()?.parse().ok()?;
@@ -363,10 +376,18 @@ fn parse_clock(text: &str) -> Option<(i32, i32, i32)> {
         Some(value) => value.parse().ok()?,
         None => 0,
     };
-    if !(0..=23).contains(&hour) || !(0..=59).contains(&minute) || !(0..=59).contains(&second) {
+    if parts.next().is_some() {
         return None;
     }
-    Some((hour, minute, second))
+    finish_clock(hour, minute, second)
+}
+
+/// Rejects an out-of-range clock, which is the only reason a parse fails here.
+fn finish_clock(hour: i32, minute: i32, second: i32) -> Option<(i32, i32, i32)> {
+    match (0..=23).contains(&hour) && (0..=59).contains(&minute) && (0..=59).contains(&second) {
+        true => Some((hour, minute, second)),
+        false => None,
+    }
 }
 
 /// `monday`, `next friday`, `last sun`.

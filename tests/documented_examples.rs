@@ -805,6 +805,44 @@ fn a_numeric_zone_offset_is_accepted_and_shifts_the_day() {
     );
 }
 
+/// The compact `hhmm` clock and a bare zone designator are accepted.
+///
+/// `20260907T1530` is in the grammar and the date part worked, but
+/// `parse_clock` split on `:` only, so the `1530` suffix failed — and a bare
+/// `2026-09-07Z` failed too, because an empty clock was an error rather than
+/// midnight. A zone with no clock now means midnight in that zone, which is
+/// what `date -d "2026-09-07Z"` does.
+#[test]
+fn a_compact_clock_and_a_bare_zone_are_accepted() {
+    for form in [
+        "20260907T1530",
+        "2026-09-07T1530",
+        "2026-09-07T15",
+        "2026-09-07T15:30",
+        "2026-09-07T15:30:45",
+        "2026-09-07Z",
+        "2026-09-07T15:30Z",
+    ] {
+        assert_eq!(
+            run(&["date", "-d", form, "-f", "%Y-%m-%d"]),
+            "2026-09-07",
+            "`-d {form}` is 2026-09-07"
+        );
+    }
+    // A compact clock past midnight still moves the day.
+    assert_eq!(
+        run(&["date", "-d", "2026-09-07T2330+0800", "-f", "%Y-%m-%d"]),
+        "2026-09-08"
+    );
+    // An out-of-range clock is still a rejection.
+    for form in ["2026-09-07T2530", "2026-09-07T15:99", "2026-09-07T1:2:3:4"] {
+        assert!(
+            run_failing(&["date", "-d", form]).contains("无法解析"),
+            "`-d {form}` is not a clock"
+        );
+    }
+}
+
 #[test]
 fn date_profile_matches_documented_output() {
     assert_eq!(
