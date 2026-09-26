@@ -186,7 +186,14 @@ fn run_lunar(
 ///
 /// `cal -L 2026` walks the whole lunar year, so it picks up the leap month on
 /// its own; an explicit `年 月` prints just that month, and only prints the
-/// leap month when `-R` is given.
+/// leap month when `-R` is given. `-3` / `-n N` widen an explicit month to a
+/// span centred on it, and `-y` widens it to the twelve months that start
+/// there — the same reading the civil view gives `cal 2026 7 -y`, which
+/// prints July through the following June.
+///
+/// `-y` was reaching here as a span of twelve and being centred like one, so
+/// `cal -L 2026 12 -y` printed the last **seven** months of the year instead:
+/// the span was clamped to the months that exist after a centred start.
 fn select_lunar_months(
     year: &Arc<LunarYear>,
     year_number: i32,
@@ -211,19 +218,19 @@ fn select_lunar_months(
                 }),
             };
         };
-        // `-3` / `-n N` widen the request the way they do in the civil view:
-        // the named month plus its neighbours, centred on it. A span of one is
-        // the named month alone, which is what an explicit `年 月` always was.
-        let span = month_count(args) as usize;
+        // `-3` / `-n N` / `-y` widen the request the way they do in the civil
+        // view: the named month plus its neighbours, centred on it. A span of
+        // one is the named month alone, which is what an explicit `年 月`
+        // always was.
+        let span = month_count(args);
         if span <= 1 {
             return Ok(vec![anchor]);
         }
         let start = all
             .iter()
             .position(|candidate| candidate.month() == anchor.month())
-            .unwrap_or(0)
-            .saturating_sub(span / 2);
-        return Ok(all.into_iter().skip(start).take(span).collect());
+            .unwrap_or(0);
+        return Ok(span_from(all, start, span));
     }
 
     // A whole-year request, or an explicit span, walks every month.
@@ -233,17 +240,43 @@ fn select_lunar_months(
     }
 
     // A single month, defaulting to the one the reference day falls in.
-    let anchor = all
+    let start = all
         .iter()
         .position(|candidate| candidate.month() == month)
         .unwrap_or(0);
-    let span = month_count(args) as usize;
-    let start = if span > 1 {
-        anchor.saturating_sub(span / 2)
-    } else {
-        anchor
+    let span = month_count(args);
+    Ok(span_from(all, start, span))
+}
+
+/// `span` months centred on `offset` months into `all`.
+///
+/// Centring is the convention `-3` and `-n N` established: the named month
+/// with one either side. At either end of the year the window is **shifted
+/// back** to keep its full length, because a centred window that does not fit
+/// has to give up one end or the other, and the length is what the reader
+/// asked for. Three months centred on 十二月 are 十月, 冬月, 腊月; three
+/// centred on 正月 are 正月, 二月, 三月.
+///
+/// The old code clamped the start and then took `span`, which cannot satisfy
+/// both the centre and the length once the window runs off the end: a
+/// three-month span at 十二月 came back as two, and a twelve-month `-y` as
+/// seven. Clamping the *end* rather than the start is what makes the two
+/// simultaneously satisfiable.
+fn span_from(all: Vec<LunarMonth>, offset: usize, span: i32) -> Vec<LunarMonth> {
+    let span = match usize::try_from(span) {
+        Ok(span) => span,
+        Err(_) => return all,
     };
-    Ok(all.into_iter().skip(start).take(span).collect())
+    match span >= all.len() {
+        true => all,
+        false => {
+            // Centre, then shift the whole window back inside the year.
+            let start = offset
+                .saturating_sub(span.saturating_sub(1) / 2)
+                .min(all.len().saturating_sub(span));
+            all.into_iter().skip(start).take(span).collect()
+        }
+    }
 }
 
 /// `农历 丙午年 七月`, with `闰` for a leap month; the year pillar and the

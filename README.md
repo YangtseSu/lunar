@@ -305,7 +305,10 @@ Options:
 
 `lunar cal -L 2026` walks the whole lunar year, so it picks up a leap month on
 its own; an explicit `-L 2020 4` prints the ordinary fourth month, and
-`-L 2020 4 -R` prints 闰四月.
+`-L 2020 4 -R` prints 闰四月. `-3` and `-n N` widen an explicit month to a span
+**centred** on it, and a span that would run off either end of the year is
+shifted back rather than cut short — three months centred on 十二月 are 十月,
+冬月, 腊月. A span at least as long as the year is the year.
 
 ## Supported range
 

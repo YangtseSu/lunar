@@ -1677,12 +1677,28 @@ fn a_lunar_month_span_centres_on_the_named_month() {
         titles(&run(&["cal", "-L", "2026", "7", "-n", "5"])).len(),
         5
     );
-    // A span at either end of the year is clipped, not wrapped.
+    // A span at either end of the year keeps its full length: the window is
+    // shifted back, not cut short. It used to be clipped, and
+    // `a_lunar_month_span_centres_on_the_named_month` pinned the clipped
+    // length of 2 as if it were intended.
     assert_eq!(
         titles(&run(&["cal", "-L", "2026", "1", "-3"])),
         vec!["农历 丙午年 正月", "农历 丙午年 二月", "农历 丙午年 三月"]
     );
-    assert_eq!(titles(&run(&["cal", "-L", "2026", "12", "-3"])).len(), 2);
+    assert_eq!(
+        titles(&run(&["cal", "-L", "2026", "12", "-3"])),
+        vec!["农历 丙午年 十月", "农历 丙午年 冬月", "农历 丙午年 腊月"]
+    );
+    // A span never comes back shorter than it was, at either end and in a
+    // thirteen-month year alike: `-y` asks for twelve and used to deliver
+    // seven from 十二月 and eleven from 七月.
+    for (year, month) in [("2020", "7"), ("2026", "7"), ("2026", "12"), ("2020", "4")] {
+        assert_eq!(
+            titles(&run(&["cal", "-L", year, month, "-y"])).len(),
+            12,
+            "`cal -L {year} {month} -y` asks for twelve months"
+        );
+    }
     // A span longer than the year yields the year, leap month included.
     assert_eq!(
         titles(&run(&["cal", "-L", "2020", "7", "-n", "20"])).len(),
