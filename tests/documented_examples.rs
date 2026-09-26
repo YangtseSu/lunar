@@ -690,6 +690,38 @@ fn a_time_of_day_is_refused_on_a_lunar_date() {
     assert!(run_failing(&["date", "-l", "-d", "2026-07-15T15:30"]).contains("无法解析"));
 }
 
+/// A numeric zone offset shifts the day, not just the clock.
+///
+/// `split_zone` used to hand `zone_offset` a slice starting one byte *before*
+/// the sign, so the sign was never seen and every `±hh:mm` was rejected —
+/// `Z`/`UTC`/`GMT` still parsed, which is why only the numeric forms were
+/// broken. The sign convention is the POSIX one the module documents: `+0800`
+/// is 8 hours *behind* UTC, so a 23:30 reading moves to the next day.
+#[test]
+fn a_numeric_zone_offset_is_accepted_and_shifts_the_day() {
+    for zone in ["+08:00", "+0800", "-05:00", "-0500", "Z", "UTC", "GMT"] {
+        assert!(
+            run(&["date", "-d", &format!("2026-09-07T15:30{zone}")]).contains("公历: 2026年9月7日"),
+            "zone {zone} is accepted and this time does not cross midnight"
+        );
+    }
+    // POSIX `+0800` is 8 hours *behind* UTC, so 23:30 is 07:30 the next day.
+    assert!(
+        run(&["date", "-d", "2026-09-07T23:30+0800"]).contains("公历: 2026年9月8日"),
+        "a zone that crosses midnight moves the day"
+    );
+    // `-0800` is 8 hours *ahead*: 23:30 is 15:30 the same day.
+    assert!(
+        run(&["date", "-d", "2026-09-07T23:30-0800"]).contains("公历: 2026年9月7日"),
+        "the inverted sign does not cross midnight here"
+    );
+    // 00:30 at -0800 is 16:30 the previous day.
+    assert!(
+        run(&["date", "-d", "2026-09-07T00:30-0800"]).contains("公历: 2026年9月6日"),
+        "a zone can move the day backwards too"
+    );
+}
+
 #[test]
 fn date_profile_matches_documented_output() {
     assert_eq!(

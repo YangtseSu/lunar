@@ -454,9 +454,10 @@ break: that every month of the year shows every one of its days, in order
 
 **Coverage gaps to be aware of when editing `src/datestr.rs`:** the epoch, keyword, relative
 and weekday paths were uncovered until `day_relative_forms_are_unaffected_by_the_calendar_flag`
-added them; the **zone** path (`+08:00`, `Z`) still has no coverage — `zone_offset` cannot
-see a sign (see Known Defects), so a test would pin a broken behaviour. The bare-year form
-is uncovered too. A change to any of those needs a test you add yourself.
+added them, and the **zone** path (`±hh:mm`, `Z`) was uncovered for as long as `zone_offset`
+could not see a sign — a test would have pinned a broken behaviour, so none was written until
+the off-by-one was fixed. `a_numeric_zone_offset_is_accepted_and_shifts_the_day` covers it now.
+The bare-year form is still uncovered. A change to that needs a test you add yourself.
 
 ## Known Defects (verified, not yet fixed)
 
@@ -472,11 +473,12 @@ of unrelated work — surface them, or fix them deliberately with a test.
   (`src/tz.rs:19,21,33,36`; `src/calendar.rs:120`) — all printing
   `当前日期超出支持范围 (1–9999 年)`. Verified: `TZ=Asia/Shangahi lunar date` reports a
   date-range problem, not a bad zone.
-- **`-d` rejects numeric zone offsets.** `split_zone` returns a slice starting one byte
-  *before* the sign (`&rest[index - 1..]`, `src/datestr.rs:297`), so `zone_offset`'s
-  `bytes.first()` never sees `+`/`-` and returns `None`. `2026-09-07T15:30+08:00` fails,
-  contradicting the README's `-d` grammar. Only `Z`/`UTC`/`GMT` suffixes work — and they all offset by
-  zero, so they can never change the day.
+- ~~**`-d` rejects numeric zone offsets.**~~ **Fixed.** `split_zone` returned a slice
+  starting one byte *before* the sign (`&rest[index - 1..]`), so `zone_offset`'s
+  `bytes.first()` never saw `+`/`-`. `Z`/`UTC`/`GMT` worked, which is why only the numeric
+  forms looked broken. Every `±hh:mm` and `±hhmm` is accepted now, and the day moves when
+  the zone crosses midnight — forwards or backwards. Note the sign is the **POSIX** one the
+  module documents: `+0800` is 8 hours *behind* UTC, the opposite of ISO 8601.
 - **`-d` rejects `next month` / `next week` / `last year`** — advertised in the README and
   reachable at `src/datestr.rs:383`. `apply_unit` has no `next`/`last` arm, so the bare word hits the
   error arm. (`next friday` works, because `parse_weekday` runs first.)

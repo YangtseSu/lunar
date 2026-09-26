@@ -306,7 +306,7 @@ fn split_zone(rest: &str) -> (&str, Option<&str>) {
         if (*byte == b'+' || *byte == b'-')
             && (bytes[index - 1].is_ascii_digit() || bytes[index - 1] == b':')
         {
-            return (rest[..index].trim_end(), Some(&rest[index - 1..]));
+            return (rest[..index].trim_end(), Some(&rest[index..]));
         }
     }
     (rest, None)
