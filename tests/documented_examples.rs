@@ -1214,6 +1214,30 @@ fn out_of_range_lunar_months_are_reported_not_indexed() {
             "lunar month {month} is reported as out of range"
         );
     }
+    // `date` derives the leap month by negating the one the user wrote, and
+    // `-R` did not check the month first: `i32::MIN` has no absolute value, so
+    // `date -l -R 2026 -- -2147483648 1` panicked. The positionals now report
+    // the number the user wrote, through the message `cal` already used.
+    for month in ["0", "13", "-13", "-2147483648"] {
+        assert!(
+            run_failing(&["date", "-l", "-R", "2026", "--", month, "1"]).contains("农历月份"),
+            "`date -l -R 2026 -- {month} 1` reports the month"
+        );
+    }
+    // The same check runs on the `-d` path, where the month arrives as text.
+    // A field the grammar has no reading for is refused as a bad date; one
+    // that reaches the resolver is reported as a bad month, never negated.
+    for (form, expected) in [
+        ("2026-13-01", "农历月份 13"),
+        ("2026-0-01", "无法解析的日期"),
+        ("2026--13-01", "无法解析的日期"),
+        ("2026--2147483648-01", "无法解析的日期"),
+    ] {
+        assert!(
+            run_failing(&["date", "-l", "-R", "-d", form]).contains(expected),
+            "`-l -R -d {form}` is {expected}"
+        );
+    }
     // An in-range leap month the year does not have still names itself, so
     // the renderer had to survive the lookup rather than index blindly. 闰腊月
     // is the rarest form there is — 155 of 9,999 years.

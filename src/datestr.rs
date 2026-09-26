@@ -274,12 +274,21 @@ fn parse_absolute(
 }
 
 /// Reads a parsed triple in the calendar `-l` selected.
+///
+/// The month is **user input**, so it is checked before the leap form is
+/// derived from it: `i32::MIN` has no absolute value, and negating it
+/// panicked. `check_lunar_month` accepts it — the whole point of
+/// `checked_abs` there is to let the error message name the number the
+/// user actually wrote — so the check belongs here, before the `-`.
 fn resolve(parts: Parts, calendar: Calendar) -> Result<CivilDate, CalError> {
     let Parts { year, month, day } = parts;
     let solar = match calendar {
         Calendar::Civil => calendar::solar(year, month, day)?,
         // A leap month is named negatively, as `cal -L -R` names it.
-        Calendar::Lunar { leap: true } => calendar::solar_from_lunar(year, -month.abs(), day)?,
+        Calendar::Lunar { leap: true } => {
+            calendar::check_lunar_month(month)?;
+            calendar::solar_from_lunar(year, -month, day)?
+        }
         Calendar::Lunar { leap: false } => calendar::solar_from_lunar(year, month, day)?,
     };
     Ok(CivilDate::new(solar.year(), solar.month(), solar.day()))
