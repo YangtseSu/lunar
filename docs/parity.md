@@ -21,7 +21,7 @@
 | `@-1` | 1970-01-01 | 1970-01-01 | ✅（向零截断） |
 | `1758240000`（漏 `@`） | `invalid date` | `月份 24 非法` | 🚧 04 |
 | `2147483647 days` | `invalid date` | `月份 48 非法` | 🚧 04 |
-| `2147483600 years` | `invalid date` | debug panic / release 回绕 | 🚧 01 |
+| `2147483600 years` | `invalid date` | `年份 2147485626 超出支持范围` | ✅（真算出的年份，而非回绕值） |
 | `90 minutes ago` | 今天 | `日期偏移单位 … 不足一天` | 🔒（无时钟） |
 | `9 hours ago` | 今天 | 同上 | 🔒 |
 | `2 days` / `1 month ago` / `next month` / `last year` | ✅ | ✅ | ✅ |

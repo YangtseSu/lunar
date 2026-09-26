@@ -542,7 +542,7 @@ fn apply_unit(date: CivilDate, unit: &str, count: i32, input: &str) -> Result<Ci
         "day" | "days" => Ok(date.add_days(i64::from(count))),
         "week" | "weeks" => Ok(date.add_days(i64::from(count) * 7)),
         "month" | "months" => Ok(date.add_months(count)),
-        "year" | "years" => Ok(date.add_years(count)),
+        "year" | "years" => date.add_years(count),
         "sec" | "secs" | "second" | "seconds" | "min" | "mins" | "minute" | "minutes" | "hour"
         | "hours" => Err(CalError::SubDayUnit {
             unit: unit.to_string(),
@@ -560,7 +560,7 @@ fn number(text: &str, input: &str) -> Result<i32, CalError> {
 fn validate(date: CivilDate, input: &str) -> Result<CivilDate, CalError> {
     if !(MIN_YEAR..=MAX_YEAR).contains(&date.year) {
         return Err(CalError::YearOutOfRange {
-            year: date.year,
+            year: i64::from(date.year),
             min: MIN_YEAR,
             max: MAX_YEAR,
         });

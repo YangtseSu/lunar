@@ -90,13 +90,15 @@ print("blocks:", len(blocks), "fails:", fails)
 
 | # | 计划 | 类型 | 优先级 |
 |---|---|---|---|
-| 01 | [add_years 溢出](plans/01-year-overflow.md) | 崩溃/静默错误 | P0 |
+| 01 | [add_years 溢出](plans/01-year-overflow.md) ✅ | 崩溃/静默错误 | P0 |
 | 02 | [--color/--no-color 语义](plans/02-color-precedence.md) | CLI 契约 | P1 |
 | 03 | [cal 跨度语义对齐 cal(1)](plans/03-span-semantics.md) | 行为对齐 | P1 |
 | 04 | [YYYYMMDD 分支吞噬长数字](plans/04-greedy-digits.md) | 解析正确性 | P1 |
 | 05 | [农历 9999 年末月不可渲染](plans/05-lunar-top-year.md) | 边界 | P2 |
 | 06 | [date(1) 能力缺口](plans/06-date-parity-forms.md) | 能力补齐 | P2 |
 | 07 | [过时文档注释清理](plans/07-doc-comment-rot.md) | 文档 | P2 |
+
+✅ = 已实施。
 
 `docs/parity.md` 是判定"差异是否为缺陷"的依据；新增差异先登记到那里，再决定是否
 立案。

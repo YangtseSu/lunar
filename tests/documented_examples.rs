@@ -892,6 +892,53 @@ fn a_sub_day_offset_is_refused_rather_than_ignored() {
     }
 }
 
+/// A year count too large to represent is reported, not wrapped.
+///
+/// `add_years` added a number **the user typed** to an `i32` year, so
+/// `+2147483600 years` panicked in debug and wrapped in release, where the
+/// error named a year nobody had asked for. The sum is taken in `i64` now and
+/// the year it reaches is the one named. The count stays unrestricted — `i32`
+/// is the width of the grammar, and the expression is well formed; only its
+/// result is out of range.
+#[test]
+fn a_huge_relative_offset_is_reported_not_wrapped() {
+    // The reference day is not an input the suite can pin, so the year the
+    // message has to name is the one the arithmetic reaches *from* it.
+    let year: i64 = run(&["date", "-d", "today", "-f", "%Y"])
+        .parse()
+        .expect("a four-digit year");
+    // Each form is the whole argument list, because a leading `-` is a flag
+    // to the argument parser: `-d -1` never reaches the date grammar, so the
+    // negative counts ride on one argument (`=`) or after `--`.
+    for (argv, offset) in [
+        (vec!["-d", "+2147483600 years"], 2_147_483_600),
+        (vec!["-d", "+2147483647 years"], 2_147_483_647),
+        (vec!["-d=-2147483647 years"], -2_147_483_647),
+        (vec!["--", "-2147483647 years"], -2_147_483_647),
+    ] {
+        let output = binary()
+            .arg("date")
+            .args(argv.clone())
+            .output()
+            .expect("lunar runs");
+        // `date(1)` answers `invalid date` and exits 1. A panic exits 101, and
+        // a wrapped year is a year nobody asked for.
+        assert_eq!(output.status.code(), Some(1), "`lunar date {argv:?}`");
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr).trim_end(),
+            format!("lunar: 年份 {} 超出支持范围 (1–9999)", year + offset),
+            "`lunar date {argv:?}`"
+        );
+    }
+    // The counted form still moves the year, and moves it by what it says.
+    let today = run(&["date", "-d", "today", "-f", "%Y-%m-%d"]);
+    assert_eq!(
+        run(&["date", "-d", "2 years", "-f", "%Y-%m-%d"]),
+        format!("{}-{}", year + 2, today.split_once('-').expect("a date").1),
+        "`-d 2 years` is two years on from {today}"
+    );
+}
+
 /// A backslash yields the character it escapes.
 ///
 /// `\n`, `\t` and `\r` had meanings and `\%` fell through to a catch-all that

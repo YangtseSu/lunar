@@ -266,8 +266,6 @@ are judged against.
 All verified; each is a plan, not intended behaviour. Fix deliberately; do not
 silently paper over one as a side effect of unrelated work.
 
-- `date -d "+2147483600 years"` overflows `i32` in `CivilDate::add_years` —
-  panic in debug, wrapped nonsense in release (`docs/plans/01`).
 - `--color --no-color` always means colour, contradicting the comment that
   claims last-flag-wins (`docs/plans/02`).
 - `cal` span flags do not match `cal(1)`: `-3` walks forward, `-n N` centres,

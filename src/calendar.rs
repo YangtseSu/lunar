@@ -27,7 +27,12 @@ pub const MAX_YEAR: i32 = 9999;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum CalError {
     /// A year outside the supported window was requested.
-    YearOutOfRange { year: i32, min: i32, max: i32 },
+    ///
+    /// `year` is the year **as computed**, which need not fit an `i32`: a
+    /// relative count the user wrote can carry a valid year out of the
+    /// representable range, and naming the year that was reached is the
+    /// honest answer — a wrapped one would be a year nobody asked for.
+    YearOutOfRange { year: i64, min: i32, max: i32 },
     /// A year that the Gregorian calendar itself skips (1582: 10-05..=10-14).
     YearMissing { year: i32 },
     /// A month number outside `1..=12` (lunar months may be negative: `-4` is
@@ -146,7 +151,7 @@ pub fn check_year(year: i32) -> Result<(), CalError> {
         Ok(())
     } else {
         Err(CalError::YearOutOfRange {
-            year,
+            year: i64::from(year),
             min: MIN_YEAR,
             max: MAX_YEAR,
         })

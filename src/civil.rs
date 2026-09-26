@@ -149,13 +149,25 @@ impl CivilDate {
     }
 
     /// This date plus `delta` years, clamping 2/29 to 2/28 in common years.
-    pub fn add_years(self, delta: i32) -> Self {
-        let year = self.year + delta;
-        Self {
+    ///
+    /// The sum is taken in `i64` and the year it reaches is named when that
+    /// year no longer fits an `i32`. `delta` is a number the user typed, and
+    /// `+2147483600 years` from 2026 lands past the representable one; a
+    /// wrapped year would be a year nobody asked for, so it is reported
+    /// instead. Whether the year is *servable* is the caller's check — this
+    /// only answers whether it exists.
+    pub fn add_years(self, delta: i32) -> Result<Self, CalError> {
+        let year = i64::from(self.year) + i64::from(delta);
+        let year = i32::try_from(year).map_err(|_| CalError::YearOutOfRange {
+            year,
+            min: calendar::MIN_YEAR,
+            max: calendar::MAX_YEAR,
+        })?;
+        Ok(Self {
             year,
             month: self.month,
             day: self.day.min(solar_util::days_of_month(year, self.month)),
-        }
+        })
     }
 
     /// Converts to `lunar-rs`' [`Solar`], rejecting out-of-range years,

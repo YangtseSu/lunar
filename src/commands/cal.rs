@@ -111,7 +111,7 @@ fn run_civil(
         }
         if cursor.year > MAX_YEAR {
             return Err(CalError::YearOutOfRange {
-                year: cursor.year,
+                year: i64::from(cursor.year),
                 min: calendar::MIN_YEAR,
                 max: MAX_YEAR,
             });
