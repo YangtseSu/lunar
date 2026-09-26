@@ -307,6 +307,17 @@ $ lunar date -d 2023-02-30
 lunar: 公历 2023-02-30 不存在
 ```
 
+农历 9999 年腊月 is the one month of the last lunar year a grid cannot draw:
+it begins on 9999-12-30 and ends on 10000-01-27, so its days leave the range.
+The month is reported by name instead of being clipped — a clipped grid would
+answer differently from `lunar date` about the same day. The months around it
+are unaffected: `cal -L 9999 11` still prints 农历 己亥年 冬月.
+
+```console
+$ lunar cal -L 9999
+lunar: 农历 9999 年腊月跨入 10000 年，超出支持范围 (1–9999)
+```
+
 The statutory calendar is a separate data window: `lunar-rs` ships the years it
 was given (2001–2026 at this release), so a grid outside that window shows
 festivals and no 放假 / 调休 marks. The window is a property of the published

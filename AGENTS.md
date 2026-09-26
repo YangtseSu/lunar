@@ -202,6 +202,12 @@ Invariants, in the order they are easiest to break:
   boundaries freely — the lunar one through `lunar_sequence`, which loads
   neighbouring lunar years. A window that leaves 1–9999 is reported, never
   clipped.
+- **Two range errors, two facts.** A window reaching into 10000
+  (`cal -L 9999 12 -n 3`) and a month's own days reaching out of it
+  (`cal -L 9999`, whose 腊月 ends on 10000-01-27) are different things and
+  read differently: the first names the year the window reached, the second
+  the month that crosses. A lunar month is never clipped to fit the range —
+  a clipped grid and `lunar date` would answer differently about one day.
 
 ## Testing & QA
 
@@ -273,8 +279,6 @@ are judged against.
 All verified; each is a plan, not intended behaviour. Fix deliberately; do not
 silently paper over one as a side effect of unrelated work.
 
-- `cal -L 9999` cannot render the last lunar year: its 腊月 crosses into 10000
-  and the whole run fails with a range error (`docs/plans/05`).
 - `-d` advertises fractional seconds but rejects them; unpadded ISO and a bare
   time with a zone are missing (`docs/plans/06`).
 - Stale doc-comments: the removed language layer ("rendered in the chosen

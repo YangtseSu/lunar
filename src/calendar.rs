@@ -63,6 +63,19 @@ pub enum CalError {
     /// A lunar month number outside `1..=12`, the leap form included
     /// (`-4` is the leap fourth month), or zero.
     LunarMonthOutOfRange { month: i32 },
+    /// A lunar month whose days cross the supported civil range.
+    ///
+    /// 腊月 of the last supported lunar year begins in December 9999 and
+    /// ends in January 10000, so a grid — which must draw every day the
+    /// month *has* — reaches past the end of the window. The month itself is
+    /// one the engine has and the reader named correctly; it is the days it
+    /// runs through that leave the range, and a bare 年份 10000 reads as a
+    /// year somebody typed.
+    LunarMonthBeyondRange {
+        lunar_year: i32,
+        month: i32,
+        civil_year: i32,
+    },
     /// A relative offset shorter than a day, which cannot move a date-only
     /// answer. Carries the unit as written, e.g. `minutes`.
     SubDayUnit { unit: String },
@@ -104,6 +117,14 @@ impl CalError {
             Self::LunarMonthOutOfRange { month } => {
                 format!("农历月份 {month} 非法 (应为 1–12，闰月为负数)")
             }
+            Self::LunarMonthBeyondRange {
+                lunar_year,
+                month,
+                civil_year,
+            } => format!(
+                "农历 {lunar_year} 年{}跨入 {civil_year} 年，超出支持范围 ({MIN_YEAR}–{MAX_YEAR})",
+                m_abs(*month)
+            ),
             Self::SubDayUnit { unit } => {
                 format!("日期偏移单位 {unit} 不足一天，本工具只输出日期")
             }
@@ -145,9 +166,14 @@ fn m_abs(month: i32) -> String {
     }
 }
 
+/// Whether a civil year falls inside the supported window.
+fn in_range(year: i32) -> bool {
+    (MIN_YEAR..=MAX_YEAR).contains(&year)
+}
+
 /// Checks a civil year against the supported window.
 pub fn check_year(year: i32) -> Result<(), CalError> {
-    if (MIN_YEAR..=MAX_YEAR).contains(&year) {
+    if in_range(year) {
         Ok(())
     } else {
         Err(CalError::YearOutOfRange {
@@ -407,7 +433,8 @@ pub fn lunar_month_start(month: &LunarMonth) -> CivilDate {
     CivilDate::new(first.year(), first.month(), first.day())
 }
 
-/// Every civil day of a lunar month, in order.
+/// Every civil day of a lunar month, in order, or the range error its days
+/// run into.
 ///
 /// Asked of the engine rather than stepped locally: the engine's calendar is
 /// not the proleptic one before 1600 and it skips the ten reform days of
@@ -415,15 +442,26 @@ pub fn lunar_month_start(month: &LunarMonth) -> CivilDate {
 /// and walks straight into the gap. A grid has to draw the days the month
 /// *has*, and since a cell's content is derived from the same lookup, the
 /// date band and the content band cannot disagree.
-pub fn lunar_month_days(month: &LunarMonth) -> Vec<CivilDate> {
-    month
-        .get_days()
-        .iter()
-        .map(|lunar| {
-            let solar = lunar.solar();
-            CivilDate::new(solar.year(), solar.month(), solar.day())
-        })
-        .collect()
+///
+/// The month is not clipped to fit the window, because a clipped grid and
+/// `lunar date` would then answer differently about the same day. 农历
+/// 9999 年腊月 fails as a whole instead — see
+/// [`CalError::LunarMonthBeyondRange`].
+pub fn lunar_month_days(month: &LunarMonth) -> Result<Vec<CivilDate>, CalError> {
+    let days = month.get_days();
+    let mut out = Vec::with_capacity(days.len());
+    for lunar in &days {
+        let solar = lunar.solar();
+        if !in_range(solar.year()) {
+            return Err(CalError::LunarMonthBeyondRange {
+                lunar_year: month.year(),
+                month: month.month(),
+                civil_year: solar.year(),
+            });
+        }
+        out.push(CivilDate::new(solar.year(), solar.month(), solar.day()));
+    }
+    Ok(out)
 }
 
 /// Looks up one month of a lunar year by its number (`-4` is the leap fourth

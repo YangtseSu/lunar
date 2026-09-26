@@ -109,7 +109,7 @@ impl Grid {
         Self::build(
             Month {
                 title,
-                days: calendar::lunar_month_days(&month),
+                days: calendar::lunar_month_days(&month)?,
                 lead,
                 lunar_view: true,
                 week_start,

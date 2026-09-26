@@ -2178,9 +2178,9 @@ fn the_missing_month_comes_from_today() {
 /// A window that runs off the supported range is reported, not clipped.
 ///
 /// The window, not the month, is what reached past the end: 农历 9999 年腊月
-/// is itself a month the engine has, and its days cross into 10000 as well —
-/// but the *anchor* here is one the window leaves by two months, which is
-/// what the range error names. A civil `9999 12 -n 3` is the same shape.
+/// is a month the engine has, but the *anchor* here is one the window leaves
+/// by two months, and it is the next lunar year the window walks into that
+/// the range error names. A civil `9999 12 -n 3` is the same shape.
 #[test]
 fn a_span_off_the_range_end_is_reported() {
     for args in [
@@ -2207,6 +2207,39 @@ fn a_span_off_the_range_end_is_reported() {
             args.join(" ")
         );
     }
+}
+
+/// The last lunar month the engine has ends outside the range, and the error
+/// says so.
+///
+/// 农历 9999 年腊月 begins on 公历 9999-12-30 and ends on 10000-01-27, so
+/// drawing it means drawing days the tool has no year for. The month is not
+/// a typo — the whole year reaches it — and the message has to name the month
+/// rather than a bare `年份 10000`, which reads as a year somebody typed. The
+/// month before it is inside the range and still prints.
+#[test]
+fn the_last_lunar_year_reports_the_boundary() {
+    let boundary = "农历 9999 年腊月跨入 10000 年，超出支持范围 (1–9999)";
+    for args in [
+        ["cal", "-L", "9999"].as_slice(),
+        ["cal", "-L", "9999", "12"].as_slice(),
+    ] {
+        assert_eq!(
+            run_failing(args),
+            format!("lunar: {boundary}"),
+            "`lunar {}` names the month and the year it crossed into",
+            args.join(" ")
+        );
+    }
+    // 冬月 runs 9999-11-30 … 9999-12-29, entirely inside the range.
+    let grid = run(&["cal", "-L", "9999", "11"]);
+    assert_eq!(
+        grid.lines().next(),
+        Some("农历 己亥年 冬月"),
+        "the month before the boundary is unaffected:\n{grid}"
+    );
+    // The first lunar year is the mirror image and still prints all twelve.
+    assert_eq!(lunar_titles(&run(&["cal", "-L", "1"])).len(), 12);
 }
 
 /// The span flags mean what `cal(1)`'s mean.
