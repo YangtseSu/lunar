@@ -363,39 +363,19 @@ pub fn lunar_year(year: i32) -> Result<Arc<LunarYear>, CalError> {
     Ok(LunarYear::from_year(year))
 }
 /// First civil day of a lunar month.
-///
-/// `LunarMonth::get_first_day` walks the lunar-new-year window, so it can hand
-/// back a day belonging to the neighbouring lunar month — for 丙午年正月 it
-/// reports 2026-01-01, which is 冬月十三. The real first day is the earliest
-/// day whose lunar month matches the requested one.
 pub fn lunar_month_start(month: &LunarMonth) -> CivilDate {
     let first = month.first_solar_day();
-    let offset = if first.lunar().month() == month.month() {
-        0
-    } else {
-        month.get_day_count()
-    };
-    let date = first.next_day(offset);
-    CivilDate::new(date.year(), date.month(), date.day())
+    CivilDate::new(first.year(), first.month(), first.day())
 }
 
 /// Looks up one month of a lunar year by its number (`-4` is the leap fourth
-/// month). `LunarYear::get_month` walks the lunar-new-year window, so the
-/// result is checked to belong to `year` before being returned.
+/// month), or `None` when the year has no such month.
 pub fn lunar_year_month(year: &LunarYear, month: i32) -> Option<LunarMonth> {
     year.get_month(month)
-        .filter(|candidate| candidate.year() == year.year())
 }
 
-/// The months of a lunar year that actually belong to it, in calendar order:
-/// 正月 through 冬月/腊月, with the leap month in its place.
-///
-/// `LunarYear::months` deliberately spans the *lunar new year*, so it also
-/// yields the tail of the previous lunar year and the head of the next one.
-/// Those months are not part of the requested year, so they are filtered out.
+/// The months of a lunar year that belong to it, in calendar order: 正月
+/// through 冬月/腊月, with the leap month in its place.
 pub fn lunar_year_months(year: &LunarYear) -> Vec<LunarMonth> {
-    year.months()
-        .into_iter()
-        .filter(|month| month.year() == year.year())
-        .collect()
+    year.months_in_year().collect()
 }

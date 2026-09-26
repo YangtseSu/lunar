@@ -51,10 +51,12 @@ Two consequences for this codebase:
    boundary to the engine; every wrapper in it is a one-line forward. A second
    path to `lunar-rs` is a design regression.
 2. **When the engine has a quirk, adapt it — do not patch around it.** The
-   wrappers exist precisely for that (`lunar_month_start` filters the
-   lunar-new-year window, `solar()` maps `GregorianGap`). If you find yourself
-   writing a table, a lookup, or arithmetic that the engine already owns, stop:
-   you are duplicating work that is better fixed upstream.
+   wrappers exist precisely for that (`solar()` maps `GregorianGap`,
+   `solar_from_lunar` round-trips across the lunar/civil year mismatch). If
+   you find yourself writing a table, a lookup, or arithmetic that the engine
+   already owns, stop: you are duplicating work that is better fixed upstream —
+   and a wrapper that once adapted a quirk may itself now be dead weight, so
+   check that it still changes anything before keeping it.
 
 **Counter-examples to keep in mind.** 国庆节 was missing from every grid for the
 life of this tool because the code consulted only `Lunar::festivals()`. The
@@ -124,10 +126,17 @@ pub fn run(args: &XArgs, today: CivilDate, out: &mut String) -> Result<(), CalEr
 **Consequence: command modules must never print.** They append to `out` and return an
 error. This is what makes the integration tests possible.
 
-`lunar-rs` quirk: `LunarYear::get_month`/`LunarMonth::get_first_day` walk the lunar-new-year
-window and can return a day belonging to a *neighbouring* year. `calendar::lunar_month_start`,
-`lunar_year_month` and `lunar_year_months` (`src/calendar.rs:232-262`) exist purely to
-filter/fix that. Any new lunar-month lookup must go through them.
+**There is no lunar-new-year window leak in `lunar-rs` 1.0.0-rc1.** Earlier versions of this
+module filtered `LunarYear::get_month`, `LunarYear::months` and `LunarMonth::get_first_day`
+because they were believed to return a neighbouring year's month. They do not: `get_month`
+matches on `m.year == self.year` itself, and `months_in_year()` is the in-year view. Swept
+over all 9,999 years, the filters changed nothing — `get_month` returned a foreign year 0
+times, and the hand-rolled filter differed from `months_in_year()` in 0 years.
+`lunar_year_month`, `lunar_year_months` and `lunar_month_start` are now plain forwards, and
+`lunar_month_start` is `first_solar_day` with no offset correction: the correction it used to
+apply fired 0 times across 123,670 months. **Do not re-add a window filter without first
+measuring that the leak exists** — and if a future `lunar-rs` reintroduces one, fix it by
+re-testing the whole range, not by copying the old code back.
 
 `lunar-rs` quirk: a lunar year and a civil year do **not** line up — 腊月 always begins
 in the following January, so 农历 2026 年腊月初一 is 公历 2027-01-08. `calendar::solar_from_lunar`
