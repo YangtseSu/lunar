@@ -1,9 +1,10 @@
 //! Layout and behaviour, pinned to what the tool documents; calendar values,
 //! pinned to what `lunar-rs` computes from astronomy.
 //!
-//! Where the two disagree the engine wins: a published sample prints a couple
-//! of stale cells (中元 three days early, 芒种 on the wrong day, two solar
-//! terms missing), and those are *not* reproduced here.
+//! Where the two disagree the engine wins: a published sample prints 芒种 on
+//! the wrong day and omits two solar terms, and those are *not* reproduced
+//! here. (The sample also prints 中元 three days early; the cell now reads
+//! 中元节 on 七月十五, which is where the engine puts it.)
 //!
 //! Every grid expectation is captured from the binary's own output, never
 //! hand-computed: the cells are padded by display width, and a CJK label
@@ -850,7 +851,7 @@ fn lunar_month_grid_has_the_documented_layout() {
 8/17    8/18    8/19    8/20    8/21    8/22    8/23
 初五    初六    七夕节  初八    初九    初十    处暑
 8/24    8/25    8/26    8/27    8/28    8/29    8/30
-十二    十三    十四    十五    十六    十七    十八
+十二    十三    十四    中元节  十六    十七    十八
 8/31    9/1     9/2     9/3     9/4     9/5     9/6
 十九    二十    廿一    廿二    廿三    廿四    廿五
 9/7     9/8     9/9     9/10
@@ -1049,10 +1050,13 @@ fn zhongyuan_is_shown_on_the_lunar_seventh_full_moon() {
         .position(|cell| *cell == "8/27")
         .expect("the 8/27 cell");
     let content: Vec<&str> = lines[row + 1].split_whitespace().collect::<Vec<_>>();
+    // The cell reads 中元节, not 十五: the festival outranks the lunar day in
+    // the cell policy, and the typed festival lookup is the only source that
+    // knows the name.
     assert_eq!(
         content[column],
-        "十五",
-        "the lunar day:\n{}",
+        "中元节",
+        "the festival on 七月十五:\n{}",
         lines[row + 1]
     );
 }

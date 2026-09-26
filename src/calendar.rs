@@ -8,7 +8,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use lunar_rs::solar_util;
-use lunar_rs::{Holiday, Lunar, LunarMonth, LunarYear, Solar};
+use lunar_rs::{Holiday, Lunar, LunarFestival, LunarMonth, LunarYear, Solar};
 
 use crate::civil::CivilDate;
 
@@ -270,19 +270,24 @@ pub fn week_offset(year: i32, month: i32, week_start: i32) -> usize {
 
 /// The festival a cell shows, or `None` when the day carries none.
 ///
-/// Both calendars' festivals are consulted. `Lunar::festivals` knows the
-/// lunar ones (春节, 中秋节) and `Solar::festivals` the civil ones (国庆节,
-/// 劳动节) plus the floating ones keyed to a weekday (母亲节, 感恩节), so
-/// asking only one of them silently drops the other half — an October grid
-/// would show 廿一 where 国庆节 belongs.
+/// Three sources are consulted, and all three are needed. `Solar::festivals`
+/// carries the civil ones (国庆节, 劳动节) plus the weekday-floating ones
+/// (母亲节, 感恩节). The lunar half has to come from the **typed** lookup,
+/// `LunarFestival::from_ymd`, not from `Lunar::festivals`: the latter is
+/// driven by a different table (`lunar_util::FESTIVAL_INDEX`) which omits
+/// 清明节, 上巳节, 中元节 and 冬至节 entirely. Reading only the string list
+/// made all four unreachable — a 七月十五 cell read 十五, never 中元节.
 ///
 /// The name is the engine's own, `中秋节` and not a shortened `中秋`; when a
 /// day carries several, the one a reader recognises wins.
 pub fn traditional_festivals(solar: &Solar, lunar: &Lunar) -> Option<String> {
+    let lunar_name = LunarFestival::from_ymd(lunar.year(), lunar.month(), lunar.day());
     solar
         .festivals()
         .iter()
         .chain(lunar.festivals().iter())
+        .copied()
+        .chain(lunar_name.map(|festival| festival.name()))
         .min_by_key(|name| festival_rank(name))
         .map(|name| name.to_string())
 }
@@ -293,16 +298,18 @@ pub fn traditional_festivals(solar: &Solar, lunar: &Lunar) -> Option<String> {
 /// alike; everything else follows, so a busy day still shows its most
 /// recognisable name.
 fn festival_rank(name: &str) -> usize {
-    const PRINCIPAL: [&str; 16] = [
+    const PRINCIPAL: [&str; 20] = [
         "春节",
         "元宵节",
-        "清明",
-        "端午",
+        "清明节",
+        "端午节",
         "七夕节",
         "中元节",
         "中秋节",
         "重阳节",
         "除夕",
+        "上巳节",
+        "冬至节",
         "元旦节",
         "劳动节",
         "国庆节",
@@ -310,6 +317,8 @@ fn festival_rank(name: &str) -> usize {
         "青年节",
         "妇女节",
         "教师节",
+        "腊八节",
+        "龙头节",
     ];
     PRINCIPAL
         .iter()

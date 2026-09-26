@@ -56,10 +56,14 @@ Two consequences for this codebase:
    writing a table, a lookup, or arithmetic that the engine already owns, stop:
    you are duplicating work that is better fixed upstream.
 
-**Counter-example to keep in mind:** 国庆节 was missing from every grid for the
+**Counter-examples to keep in mind.** 国庆节 was missing from every grid for the
 life of this tool because the code consulted only `Lunar::festivals()`. The
 civil festivals live in `Solar::festivals()`. The engine had them all along;
-the mistake was not reading its API before using it.
+the mistake was not reading its API before using it. The same mistake repeated
+with `Lunar::festivals()` itself: 清明节, 上巳节, 中元节 and 冬至节 are in the
+engine but in the **typed** `LunarFestival` table, not the string list, and
+reading the wrong one of two APIs the engine offers loses a holiday just as
+silently. Read the whole API before concluding the engine lacks something.
 
 ## Architecture & Data Flow
 
@@ -266,12 +270,19 @@ grid differ in trailing spaces only — and why the suite's `split_on_pitch` mus
 SGR run as occupying no column and must cut a cell boundary *before* a run that opens
 the next cell.
 
-**Both calendars' festivals are consulted.** `calendar::traditional_festivals`
-takes *both* a `Solar` and a `Lunar` and chains `Solar::festivals()` (civil:
-国庆节, 劳动节, plus the weekday-floating ones) with `Lunar::festivals()`
-(lunar: 春节, 中秋节). Consulting only the `Lunar` half silently drops every
-civil festival — an October grid read `廿一` where 国庆节 belongs. When a day
-carries several, `festival_rank` prefers the one a reader scans for.
+**Three festival sources, and the third is not optional.** `calendar::traditional_festivals`
+takes *both* a `Solar` and a `Lunar` and chains `Solar::festivals()` (civil: 国庆节,
+劳动节, plus the weekday-floating ones) with `Lunar::festivals()` (春节, 中秋节).
+Consulting only the `Lunar` half silently drops every civil festival — an October grid
+read `廿一` where 国庆节 belongs.
+
+The lunar half is **not** complete on its own. `Lunar::festivals()` is driven by
+`lunar_util::FESTIVAL_INDEX`, a *different* table from the one the typed lookup uses, and it
+omits 清明节, 上巳节, 中元节 and 冬至节 entirely — reading only the string list made all four
+unreachable, and 七月十五 rendered as 十五. `LunarFestival::from_ymd` is the only source that
+knows those names, so it is chained in as well. When a day carries several, `festival_rank`
+prefers the one a reader scans for; its `PRINCIPAL` list must spell the names **as the engine
+does** (`清明节`, `端午节`), since a name that matches nothing sorts last and loses.
 
 **Leap months are negative numbers.** A leap fourth month is `-4`; `m_abs`
 (`src/calendar.rs:108-112`) renders the 闰 prefix. Keep the sign convention.
@@ -417,9 +428,10 @@ grid comparisons trim each line.
 
 **Engine wins over samples.** Where the published samples and the astronomy disagree, the
 engine is correct and the sample is stale. The suite says so explicitly at
-`tests/documented_examples.rs:1-6`, and `README.md:299-301` repeats it. Stale cells include
+`tests/documented_examples.rs:1-7`, and `README.md:299-301` repeats it. Stale cells include
 中元 three days early, 芒种 on the wrong day, and 雨水/惊蛰 missing. **Do not "fix" the
-engine to match a sample.**
+engine to match a sample.** (The 中元 entry is why the cell now reads 中元节 on 七月十五:
+the sample is early, and the tool follows the engine.)
 
 **Beyond pinning layouts, the suite pins an invariant** a renderer can easily
 break: that every month of the year shows every one of its days, in order
