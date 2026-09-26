@@ -61,6 +61,9 @@ pub enum CalError {
     /// A relative offset shorter than a day, which cannot move a date-only
     /// answer. Carries the unit as written, e.g. `minutes`.
     SubDayUnit { unit: String },
+    /// A positional argument that is not a number, or one too many of them.
+    /// Carries the offending text, empty when the count is what is wrong.
+    BadArgument { detail: String },
 }
 
 impl CalError {
@@ -102,6 +105,10 @@ impl CalError {
             Self::UnparsableDate { input } => format!("无法解析的日期: {input}"),
             Self::BadTimeZone { source } => format!("无法读取时区: {source}"),
             Self::ClockBeforeEpoch => "系统时钟早于 1970-01-01".to_string(),
+            Self::BadArgument { detail } => match detail.is_empty() {
+                true => "位置参数过多".to_string(),
+                false => format!("无法解析的位置参数: {detail}"),
+            },
         }
     }
 }

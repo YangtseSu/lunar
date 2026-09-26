@@ -510,11 +510,12 @@ of unrelated work — surface them, or fix them deliberately with a test.
 - ~~The same bad date yields different messages depending on the input channel.~~ **Fixed.**
   Both channels now resolve through `datestr`, so `2023-02-30` is `公历 2023-02-30
   不存在` either way, and out-of-range components give `月份 13 非法 (应为 1–12)` on both.
-- `cal` uses `CalError::MonthOutOfRange { month: -1 }` as a generic "bad argument" sentinel
-  (`src/commands/cal.rs`), producing the misleading `月份 -1 非法 (应为 1–12)` — a
-  non-numeric positional lands there. The *month* of a `-L` request is not one of them:
-  `select_lunar_months` calls `check_lunar_month` before the lookup, and `m_abs` range-checks
-  on its own account, so no input reaches the `lunar_util::MONTH` index unchecked.
+- ~~**`cal` used `MonthOutOfRange { month: -1 }` as a bad-argument sentinel.**~~ **Fixed.**
+  A non-numeric year, a non-numeric month and a third positional all printed 月份 -1 非法
+  (应为 1–12) — a month out of range by a number the user never wrote. `CalError::BadArgument`
+  carries the offending text, or an empty string when the *count* is what is wrong, so
+  `无法解析的位置参数: abc` and `位置参数过多` are now distinguishable from each other and
+  from a real out-of-range month. `date` already had its own error and keeps it.
 - `-3` / `-n N` are silently ignored under `-L` whenever a positional is present.
 - ~~**`src/main.rs` parses `-m/--monday` and discards it.**~~ **Fixed.** It reached the
   dispatch as `let _ = monday;` and did nothing, and because Monday *is* the default the

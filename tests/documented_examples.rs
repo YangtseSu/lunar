@@ -1215,6 +1215,51 @@ fn out_of_range_years_are_rejected() {
     assert!(run_failing(&["date", "2023", "2", "30"]).contains("不存在"));
 }
 
+/// A malformed positional says what is wrong with the argument.
+///
+/// `cal` reported every one of these as 月份 -1 非法 (应为 1–12) — a
+/// non-numeric year, a third positional, all of them a month out of range by
+/// a number the user never wrote. The sentinel is gone: each failure carries
+/// its own message, and a real out-of-range month still says so.
+#[test]
+fn a_malformed_positional_is_reported_as_such() {
+    for args in [
+        ["cal", "2026", "abc"].as_slice(),
+        ["cal", "abc"].as_slice(),
+        ["cal", "-L", "2026", "abc"].as_slice(),
+        ["cal", "-L", "abc"].as_slice(),
+    ] {
+        let error = run_failing(args);
+        assert!(
+            error.contains("无法解析的位置参数"),
+            "`lunar {}` names the bad argument, got: {error}",
+            args.join(" ")
+        );
+        assert!(
+            !error.contains("月份 -1"),
+            "`lunar {}` does not report a month the user never wrote",
+            args.join(" ")
+        );
+    }
+    // Too many positionals is its own problem, not a month out of range.
+    for args in [
+        ["cal", "2026", "1", "2"].as_slice(),
+        ["cal", "2026", "1", "2", "3"].as_slice(),
+        ["cal", "-L", "2026", "1", "2"].as_slice(),
+    ] {
+        assert!(
+            run_failing(args).contains("位置参数过多"),
+            "`lunar {}` reports the count",
+            args.join(" ")
+        );
+    }
+    // A real out-of-range month and year still report themselves.
+    assert!(run_failing(&["cal", "2026", "13"]).contains("月份 13 非法"));
+    assert!(run_failing(&["cal", "10000", "1"]).contains("年份 10000 超出支持范围"));
+    // `date` had its own error already and keeps it.
+    assert!(run_failing(&["date", "abc"]).contains("无法解析的日期"));
+}
+
 /// October 1582 renders, with the ten reform days simply absent.
 ///
 /// The grid stepped the month with `add_days` and validated every slot with

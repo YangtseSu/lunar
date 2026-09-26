@@ -88,7 +88,11 @@ fn run_civil(
             positional_int(&args.positional[0])?,
             positional_int(&args.positional[1])?,
         ),
-        _ => return Err(CalError::MonthOutOfRange { month: -1 }),
+        _ => {
+            return Err(CalError::BadArgument {
+                detail: String::new(),
+            });
+        }
     };
     calendar::check_year(year)?;
     calendar::check_month(month)?;
@@ -152,7 +156,11 @@ fn run_lunar(
             positional_int(&args.positional[0])?,
             positional_int(&args.positional[1])?,
         ),
-        _ => return Err(CalError::MonthOutOfRange { month: -1 }),
+        _ => {
+            return Err(CalError::BadArgument {
+                detail: String::new(),
+            });
+        }
     };
     let months = calendar::lunar_year(year)?;
     let selected = select_lunar_months(&months, year, month, args)?;
@@ -252,6 +260,7 @@ fn month_count(args: &CalArgs) -> i32 {
 
 /// Parses a positional integer.
 fn positional_int(text: &str) -> Result<i32, CalError> {
-    text.parse()
-        .map_err(|_| CalError::MonthOutOfRange { month: -1 })
+    text.parse().map_err(|_| CalError::BadArgument {
+        detail: text.to_string(),
+    })
 }
