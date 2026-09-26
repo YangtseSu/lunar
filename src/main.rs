@@ -25,7 +25,6 @@ use std::process::ExitCode;
 
 use clap::{ArgAction, Parser, Subcommand};
 
-use crate::calendar::{MAX_YEAR, MIN_YEAR};
 use crate::commands::{cal, date};
 
 /// Token help, printed by `lunar date --help-format`.
@@ -243,13 +242,4 @@ fn main() -> ExitCode {
             ExitCode::FAILURE
         }
     }
-}
-
-/// Kept in the binary so the documented range shows up in `--help`.
-#[allow(dead_code)]
-const SUPPORTED_YEARS: &str = "1-9999";
-
-#[allow(dead_code)]
-fn range_hint() -> String {
-    format!("{MIN_YEAR}–{MAX_YEAR}")
 }
