@@ -1294,6 +1294,14 @@ fn a_malformed_positional_is_reported_as_such() {
         ["cal", "2026", "1", "2"].as_slice(),
         ["cal", "2026", "1", "2", "3"].as_slice(),
         ["cal", "-L", "2026", "1", "2"].as_slice(),
+        // `date` swallowed a fourth: the arm was `[year, month, day, ..]`, so
+        // `date 2026 1 1 extra` answered 2026-01-01 and exited 0 — a typo read
+        // as agreement, and a silently different date if the typo was a
+        // number.
+        ["date", "2026", "1", "1", "extra"].as_slice(),
+        ["date", "2026", "1", "1", "2"].as_slice(),
+        ["date", "2026", "1", "2", "3", "4", "5"].as_slice(),
+        ["date", "-l", "2026", "7", "15", "3"].as_slice(),
     ] {
         assert!(
             run_failing(args).contains("位置参数过多"),

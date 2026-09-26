@@ -74,7 +74,7 @@ fn resolve(args: &DateArgs, today: CivilDate) -> Result<CivilDate, CalError> {
     }
     match args.positional.as_slice() {
         [] => Ok(today),
-        [year, month, day, ..] => {
+        [year, month, day] => {
             let year = number(year)?;
             let month = number(month)?;
             let day = number(day)?;
@@ -84,8 +84,12 @@ fn resolve(args: &DateArgs, today: CivilDate) -> Result<CivilDate, CalError> {
         // `-l` selected — `now`, `next friday`, `2026-07-15` all read the
         // same way in both.
         [one] => datestr::parse(one, today, calendar),
-        _ => Err(CalError::UnparsableDate {
-            input: args.positional.join(" "),
+        // A fourth is a fourth, whatever the first three said. The arm used
+        // to be `[year, month, day, ..]`, so `date 2026 1 1 extra` answered
+        // 2026-01-01 and exited 0 — a typo read as agreement. `cal` reports
+        // 位置参数过多 for the same mistake; `date` names its own count.
+        _ => Err(CalError::BadArgument {
+            detail: String::new(),
         }),
     }
 }
