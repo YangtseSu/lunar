@@ -189,7 +189,8 @@ Invariants, in the order they are easiest to break:
   (`CalError::SubDayUnit`), not ignored.
 - **What `-l` must not change:** keyword, `@epoch`, weekday and relative forms
   name a *day*, so they resolve against the reference exactly as before. A
-  time-of-day suffix is civil-only and is refused under `-l` rather than dropped.
+  time of day is civil syntax — a suffix on an absolute date **or a bare
+  `15:30` of its own** — and is refused under `-l` rather than dropped.
 - **Adding a `-f` token:** extend the `match` in `format.rs` **and** all three
   tables — the module doc, `FORMAT_HELP` (`src/main.rs`) and the README table.
   `--help-format` must list every token; the suite checks it does.
@@ -279,8 +280,6 @@ are judged against.
 All verified; each is a plan, not intended behaviour. Fix deliberately; do not
 silently paper over one as a side effect of unrelated work.
 
-- `-d` advertises fractional seconds but rejects them; unpadded ISO and a bare
-  time with a zone are missing (`docs/plans/06`).
 - Stale doc-comments: the removed language layer ("rendered in the chosen
   language", `Mon..Sun`), `班` in profiles that print `调休上班`
   (`docs/plans/07`).

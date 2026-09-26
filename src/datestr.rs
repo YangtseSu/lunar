@@ -4,11 +4,14 @@
 //!
 //! * keywords: `now`, `today`, `tomorrow`, `yesterday`
 //! * epoch seconds: `@1758240000`, `@-1`, `@1758240000.25`
-//! * ISO 8601: `2026-09-07`, `2026-09-07T15:30`, `20260907T1530`,
-//!   `2026-09-07T15:30:45.123456789+08:00`, `...Z`
-//! * slashes: `2026/09/07`, `09/07/2026` (month/day/year)
+//! * ISO 8601: `2026-09-07`, `2026-9-7` (a month or day may be unpadded),
+//!   `2026-09-07T15:30`, `20260907T1530`, `2026-09-07T15:30:45.5+08:00` (a
+//!   fractional second is truncated — no clock is kept), `...Z`
+//! * slashes: `2026/09/07`, `2026/9/7`, `09/07/2026` (month/day/year)
 //! * relative: `+3 days`, `-2 weeks`, `2 days ago`, `1 fortnight`, `90 minutes`
-//! * weekday names: `monday`, `next friday`, `last friday`
+//! * weekday names: `monday`, `next friday`, `last friday`, and the Chinese
+//!   `星期六`, `周二`, `礼拜六`, `星期天` (this tool's extension)
+//! * a bare time of day: `15:30`, `15:30 UTC` — today, in the zone given
 //! * **lunar** (with `date -l`): `2026-07-15`, `20260715`, `2026/7/15`
 //!
 //! Everything is anchored to a reference day (today by default), exactly like
@@ -28,6 +31,12 @@
 //! date written in one calendar or the other, so they resolve against the
 //! reference exactly as they do without `-l`.
 //!
+//! A time of day is **civil syntax**, whichever way it is written: as a suffix
+//! on an absolute date or as a bare `15:30` of its own, and with or without a
+//! zone. Under `-l` it is refused rather than dropped, and a zone on a bare
+//! time resolves the day that time falls on in *that* zone — which is not
+//! always the reference day.
+//!
 //! The fixed-width shapes are claimed on a **word boundary**, not on a digit
 //! count: the compact `YYYYMMDD` form needs its eight digits to end the token,
 //! so a bare timestamp (`1758240000`) and a relative offset (`2147483647 days`)
@@ -38,7 +47,14 @@ use crate::calendar::{self, CalError, MAX_YEAR, MIN_YEAR};
 use crate::civil::{self, CivilDate};
 
 /// Weekday names accepted in `-d` strings.
-const WEEKDAYS: [(&str, i32); 21] = [
+///
+/// The Chinese names are **this tool's extension** — `date(1)` has no
+/// weekday name in Chinese, and refuses all of them. The table carries the
+/// three prefixes a reader writes (`星期X`, `周X`, `礼拜X`) over 一…日 plus
+/// the `天` variant, because the same suffix has to answer whichever prefix
+/// a user reaches for; it used to carry 星期日 / 星期天 / 礼拜天 / 周一 and
+/// nothing else, so `周六` and `星期二` were unparsable.
+const WEEKDAYS: [(&str, i32); 41] = [
     ("sunday", 0),
     ("sun", 0),
     ("monday", 1),
@@ -58,8 +74,28 @@ const WEEKDAYS: [(&str, i32); 21] = [
     ("sat", 6),
     ("星期日", 0),
     ("星期天", 0),
+    ("周日", 0),
+    ("周天", 0),
+    ("礼拜日", 0),
     ("礼拜天", 0),
+    ("星期一", 1),
     ("周一", 1),
+    ("礼拜一", 1),
+    ("星期二", 2),
+    ("周二", 2),
+    ("礼拜二", 2),
+    ("星期三", 3),
+    ("周三", 3),
+    ("礼拜三", 3),
+    ("星期四", 4),
+    ("周四", 4),
+    ("礼拜四", 4),
+    ("星期五", 5),
+    ("周五", 5),
+    ("礼拜五", 5),
+    ("星期六", 6),
+    ("周六", 6),
+    ("礼拜六", 6),
 ];
 
 /// Malformed-input error, carrying the offending text.
@@ -84,6 +120,67 @@ fn digits(text: &str, at: usize, until: usize) -> Option<&str> {
         true => Some(field),
         false => None,
     }
+}
+
+/// A four-digit year followed by a month and a day, at least one of them a
+/// single digit, as in `2026-9-7` or `2026/9/7`.
+///
+/// The fields are **digit runs, not spans between separators**, so a trailing
+/// time of day is left over rather than mistaken for a third field; the last
+/// element is the offset the date ends at, and the caller hands what follows
+/// to [`finish`] as every other absolute branch does.
+///
+/// `None` for a fully padded `2026-09-07`, which the fixed-width branch owns,
+/// and for a field pair the grammar cannot read: the two separators must
+/// match, and the day must be digits. `2026-中-07` — a year, an unreadable
+/// month and a two-digit day — has no reading here, and falls through to be
+/// reported rather than to be answered with the reference day.
+///
+/// The input is the lower-cased text, as [`compact_suffix`] takes it, so the
+/// `T` / `t` distinction of a suffix is already gone.
+fn unpadded_iso(text: &str) -> Option<(&str, &str, &str, usize)> {
+    let digit = |field: &str| field.bytes().all(|byte| byte.is_ascii_digit());
+    let year = text.get(..4)?;
+    let after_year = text.get(4..)?;
+    if !digit(year) {
+        return None;
+    }
+    for separator in ['-', '/'] {
+        let Some(after_separator) = after_year.strip_prefix(separator) else {
+            continue;
+        };
+        let month: usize = after_separator
+            .bytes()
+            .take_while(u8::is_ascii_digit)
+            .count();
+        let Some(rest) = after_separator.get(month + 1..) else {
+            continue;
+        };
+        let day: usize = rest.bytes().take_while(u8::is_ascii_digit).count();
+        // The day has to follow the **same** separator: `2026-9/7` and
+        // `2026-中-07` — a year, an unreadable month and a two-digit day —
+        // are not dates, and `date(1)` refuses both. They fall through here
+        // to be reported rather than to be answered with the reference day.
+        let (month_field, after_month) = after_separator.split_at_checked(month)?;
+        let (day_field, after_day) = after_month.strip_prefix(separator)?.split_at_checked(day)?;
+        // What may follow the day is the same set the compact form allows: a
+        // `T` / `t` / space before a time part, or a zone designator standing
+        // on its own. `2026-09-0中` has a digit run and then a character the
+        // grammar cannot read, and the branch must leave it alone — claiming
+        // it would report a bad **day** for an input the user wrote as a bad
+        // date, where `date(1)` says `invalid date` and so does every other
+        // branch here.
+        let suffixed =
+            after_day.is_empty() || after_day.starts_with(['t', ' ']) || is_bare_zone(after_day);
+        // A padded `2026-09-07` is the fixed-width branch's, and the compact
+        // `20260907` has no separator here at all.
+        let unpadded =
+            (1..=2).contains(&month) && (1..=2).contains(&day) && (month == 1 || day == 1);
+        if unpadded && suffixed {
+            return Some((year, month_field, day_field, 4 + 1 + month + 1 + day));
+        }
+    }
+    None
 }
 
 /// What follows a compact `YYYYMMDD` date, or `None` when the run of digits
@@ -263,6 +360,25 @@ fn parse_absolute(
         return finish(parts, "", calendar, input).map(Some);
     }
 
+    // YYYY-M-D / YYYY/M/D, with a month or a day written in one digit:
+    // `2026-9-7`, `2026/9/7`. Claimed only when a field is unpadded, so a
+    // padded `2026-09-07` keeps the fixed-width branch below and no form
+    // that already parsed changes shape. `date(1)` reads both.
+    if let Some((year, month, day, consumed)) = unpadded_iso(lower) {
+        let parts = Parts {
+            year: number(year, input)?,
+            month: number(month, input)?,
+            day: number(day, input)?,
+        };
+        return finish(
+            parts,
+            lower.get(consumed..).unwrap_or_default(),
+            calendar,
+            input,
+        )
+        .map(Some);
+    }
+
     // A date whose first field is a one- to three-digit year, e.g. `1-01-01`
     // or `999-12-31`.
     if bytes.len() >= 6
@@ -315,9 +431,28 @@ fn parse_absolute(
         return resolve(Parts { year, month, day }, calendar).map(Some);
     }
 
-    // A bare time of day applies to today: 15:30, 15:30:45
-    if let Some((_, _, _)) = parse_clock(text) {
-        return Ok(Some(reference));
+    // A bare time of day applies to today: 15:30, 15:30:45, and with a
+    // zone, `15:30 UTC` — the day that time falls on *in that zone*, which
+    // is what `date(1)` answers and is not always today. It goes through
+    // [`finish`] so the zone shift and the `-l` refusal are the two rules
+    // every other time of day already obeys. The branch used to answer with
+    // today whatever the string said and accepted it under `-l`, where a
+    // time of day is refused.
+    //
+    // The **colon** is what makes it a time rather than a year. `2026` and
+    // `1530` are bare years the branch above already answered as the
+    // reference's month and day, and a clock read off a `2026` hour would
+    // have turned `2026-中-07` — a year, a Chinese character and a day —
+    // into `2026:00` with a `07` zone, and answered the reference day for
+    // an input the grammar has no reading for.
+    let (clock, _) = split_zone(lower);
+    if clock.contains(':') && parse_clock(clock).is_some() {
+        let parts = Parts {
+            year: reference.year,
+            month: reference.month,
+            day: reference.day,
+        };
+        return finish(parts, lower, calendar, input).map(Some);
     }
 
     let _ = text;
@@ -468,7 +603,20 @@ fn parse_clock(text: &str) -> Option<(i32, i32, i32)> {
         None => 0,
     };
     let second: i32 = match parts.next() {
-        Some(value) => value.parse().ok()?,
+        // A fractional second is accepted and **truncated**: this tool keeps
+        // no clock, so `…T15:30:45.5+08:00` and `…T15:30:45+08:00` are the
+        // same day. A fraction that was written at all must be digits — a
+        // bare `.` and a `.abc` tail are two spellings `date(1)` refuses,
+        // and so are we — while a seconds field without one is unchanged.
+        Some(value) => match value.split_once('.') {
+            None => value.parse().ok()?,
+            Some((whole, fraction)) => {
+                if fraction.is_empty() || !fraction.bytes().all(|byte| byte.is_ascii_digit()) {
+                    return None;
+                }
+                whole.parse().ok()?
+            }
+        },
         None => 0,
     };
     if parts.next().is_some() {

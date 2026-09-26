@@ -1127,6 +1127,238 @@ fn a_time_of_day_is_refused_on_a_lunar_date() {
     assert!(run_failing(&["date", "-l", "-d", "2026-07-15T15:30"]).contains("无法解析"));
 }
 
+/// A fractional second is accepted, and **truncated**: the tool keeps no
+/// clock, so the fraction cannot move the day.
+///
+/// The module doc advertised `2026-09-07T15:30:45.123456789+08:00` from the
+/// start and the parser refused it — `parse_clock` took the whole `45.123`
+/// as the seconds and `finish_clock` rejected it. The fraction is dropped
+/// before the range check, and a fraction that is not digits stays a
+/// rejection, as `date(1)` has it.
+#[test]
+fn a_fractional_second_is_truncated() {
+    for fraction in [".5", ".123456789", ".0", ".000001"] {
+        assert_eq!(
+            run(&[
+                "date",
+                "-d",
+                &format!("2026-09-07T15:30:45{fraction}+08:00")
+            ]),
+            run(&["date", "-d", "2026-09-07T15:30:45+08:00"]),
+            "`…T15:30:45{fraction}+08:00` is the same day as `…T15:30:45+08:00`"
+        );
+    }
+    // The zone still shifts the day, and the fraction does not change that.
+    assert_eq!(
+        run(&["date", "-d", "2026-09-07T23:30:45.5+0800", "-f", "%Y-%m-%d"]),
+        "2026-09-08"
+    );
+    // A seconds field that is not a fraction of digits is still refused, and
+    // an out-of-range one is refused with the fraction dropped or not.
+    for form in [
+        "2026-09-07T15:30:45.",
+        "2026-09-07T15:30:45.abc",
+        "2026-09-07T15:30:45.5abc",
+        "2026-09-07T15:30:60.5",
+        "2026-09-07T15:30:99.123",
+    ] {
+        assert!(
+            run_failing(&["date", "-d", form]).contains("无法解析"),
+            "`-d {form}` is not a clock"
+        );
+    }
+}
+
+/// A month or a day written in one digit is the same date.
+///
+/// `date(1)` reads `2026-9-7` and `2026/9/7`; the fixed-width branch could
+/// not, and the short-year branch claims nothing here, so both were
+/// unparsable. The branch is claimed only when a field is **unpadded**, so a
+/// padded `2026-09-07` still belongs to the branch that had it, and the US
+/// `MM/DD/YYYY` order keeps the priority it is listed with.
+#[test]
+fn an_unpadded_iso_date_is_accepted() {
+    let padded = run(&["date", "-d", "2026-09-07"]);
+    for form in ["2026-9-7", "2026/9/7", "2026-09-7", "2026-9-07"] {
+        assert_eq!(
+            run(&["date", "-d", form]).lines().next(),
+            padded.lines().next(),
+            "`-d {form}` is 2026-09-07"
+        );
+    }
+    // A time of day and a zone travel with it, exactly as on the padded form.
+    assert_eq!(
+        run(&["date", "-d", "2026-9-7T15:30:45.5-0800", "-f", "%Y-%m-%d"]),
+        "2026-09-07"
+    );
+    // The US order is unchanged: a four-digit *last* field is still the year.
+    for (form, expected) in [
+        ("09/07/2026", "2026-09-07"),
+        ("9/7/2026", "2026-09-07"),
+        ("12/31/1999", "1999-12-31"),
+    ] {
+        assert_eq!(
+            run(&["date", "-d", form, "-f", "%Y-%m-%d"]),
+            expected,
+            "`-d {form}` keeps the US order"
+        );
+    }
+    // The branches that own the padded and compact forms still own them.
+    for (form, expected) in [
+        ("2026-09-07", "2026-09-07"),
+        ("20260907", "2026-09-07"),
+        ("1-01-01", "1-01-01"),
+        ("999-12-31", "999-12-31"),
+    ] {
+        assert_eq!(
+            run(&["date", "-d", form, "-f", "%Y-%m-%d"]),
+            expected,
+            "`-d {form}` keeps its own branch"
+        );
+    }
+    // A month the grammar has no reading for is still a bad date, and a day
+    // that reaches the resolver names itself: a value the user can correct.
+    for form in [
+        "2026-9-123",
+        "2026-9/7",
+        "2026/9-7",
+        "2026-中-07",
+        "2026-07",
+    ] {
+        assert!(
+            run_failing(&["date", "-d", form]).contains("无法解析"),
+            "`-d {form}` is not a date"
+        );
+    }
+    assert!(
+        run_failing(&["date", "-d", "2026-13-7"]).contains("月份 13 非法"),
+        "a month that reaches the resolver names itself"
+    );
+    // It reads in the lunar channel too — both channels share the grammar.
+    assert_eq!(
+        run(&["date", "-l", "-d", "2026/7/15"]),
+        run(&["date", "-l", "2026", "7", "15"])
+    );
+}
+
+/// A bare time of day with a zone is the day that time falls on **in that
+/// zone**, and it is refused under `-l` like every other time of day.
+///
+/// The branch answered with the reference day whatever the string said, so
+/// `15:30 UTC` — which crosses midnight for a reader east of Greenwich —
+/// was unparsable, and `15:30` was *accepted* under `-l`, where the rule says
+/// a time of day is refused. It now goes through `finish`, so the zone shift
+/// and the refusal are the two rules the other forms already obey.
+#[test]
+fn a_bare_time_resolves_in_its_zone() {
+    let today = run(&["date", "-d", "today", "-f", "%Y-%m-%d"]);
+    for form in [
+        "15:30 UTC",
+        "15:30 GMT",
+        "15:30",
+        "15:30:45.5+08:00",
+        "23:30+0800",
+    ] {
+        assert!(
+            run(&["date", "-d", form, "-f", "%Y-%m-%d"]).len() == 10,
+            "`-d {form}` answers with a day"
+        );
+    }
+    // A zone that cannot move the day away from the reference is still the
+    // reference, which is what a bare time asks for.
+    assert_eq!(run(&["date", "-d", "15:30", "-f", "%Y-%m-%d"]), today);
+    assert_eq!(run(&["date", "-d", "15:30 UTC", "-f", "%Y-%m-%d"]), today);
+    // A zone that *does* move it is answered on the moved day, the way
+    // `date -d "15:30 UTC"` answers. POSIX `+0800` is 8 hours behind UTC,
+    // so 23:30 there is 15:30 UTC — and in UTC the same string is today.
+    let east = run(&["date", "-d", "23:30+0800", "-f", "%Y-%m-%d"]);
+    assert_ne!(east, today, "a zone that crosses midnight moves the day");
+    assert_eq!(
+        run(&["date", "-d", "23:30-0800", "-f", "%Y-%m-%d"]),
+        today,
+        "the inverted sign does not cross midnight here"
+    );
+    // Under `-l` a time of day is refused, whatever it is attached to.
+    for form in ["15:30", "15:30 UTC", "15:30+08:00", "23:30"] {
+        assert!(
+            run_failing(&["date", "-l", "-d", form]).contains("无法解析"),
+            "`-l -d {form}` is refused"
+        );
+    }
+    // A bare year is a year, not a clock: `2026` and `1530` keep the reading
+    // the bare-year branch gives them.
+    for form in ["2026", "1530"] {
+        assert_eq!(
+            run(&["date", "-d", form, "-f", "%Y-%m-%d"]),
+            format!("{form}-{}", &today[5..]),
+            "`-d {form}` is a bare year"
+        );
+    }
+}
+
+/// The Chinese weekday names resolve to the day their English spelling does.
+///
+/// The table carried 星期日 / 星期天 / 礼拜天 / 周一 and nothing else, so the
+/// names a reader is most likely to type — `周六`, `星期二`, `礼拜六` — were
+/// unparsable. All three prefixes over 一…日 plus the `天` variant are
+/// registered now. This is **this tool's extension**: `date(1)` has no
+/// weekday name in Chinese and refuses every one of them.
+#[test]
+fn chinese_weekday_names_are_accepted() {
+    let english = |name: &str| run(&["date", "-d", name, "-f", "%Y-%m-%d"]);
+    for (chinese, name) in [
+        ("星期日", "sunday"),
+        ("星期天", "sunday"),
+        ("周日", "sunday"),
+        ("周天", "sunday"),
+        ("礼拜日", "sunday"),
+        ("礼拜天", "sunday"),
+        ("星期一", "monday"),
+        ("周一", "monday"),
+        ("礼拜一", "monday"),
+        ("星期二", "tuesday"),
+        ("周二", "tuesday"),
+        ("礼拜二", "tuesday"),
+        ("星期三", "wednesday"),
+        ("周三", "wednesday"),
+        ("礼拜三", "wednesday"),
+        ("星期四", "thursday"),
+        ("周四", "thursday"),
+        ("礼拜四", "thursday"),
+        ("星期五", "friday"),
+        ("周五", "friday"),
+        ("礼拜五", "friday"),
+        ("星期六", "saturday"),
+        ("周六", "saturday"),
+        ("礼拜六", "saturday"),
+    ] {
+        assert_eq!(
+            run(&["date", "-d", chinese, "-f", "%Y-%m-%d"]),
+            english(name),
+            "`{chinese}` is the same day as `{name}`"
+        );
+    }
+    // `next` / `last` combine with them, as they do with the English names.
+    for (chinese, name) in [
+        ("next 星期六", "next saturday"),
+        ("last 周天", "last sunday"),
+    ] {
+        assert_eq!(
+            run(&["date", "-d", chinese, "-f", "%Y-%m-%d"]),
+            english(name),
+            "`{chinese}` is the same day as `{name}`"
+        );
+    }
+    // A Chinese name names a *day*, not a date, so `-l` does not change it.
+    for form in ["星期六", "周二", "礼拜六", "星期天", "next 星期六"] {
+        assert_eq!(
+            run(&["date", "-d", form]),
+            run(&["date", "-l", "-d", form]),
+            "`-d {form}` must not depend on `-l`"
+        );
+    }
+}
+
 /// A numeric zone offset shifts the day, not just the clock.
 ///
 /// `split_zone` used to hand `zone_offset` a slice starting one byte *before*
@@ -1606,7 +1838,11 @@ fn out_of_range_lunar_months_are_reported_not_indexed() {
     // that reaches the resolver is reported as a bad month, never negated.
     for (form, expected) in [
         ("2026-13-01", "农历月份 13"),
-        ("2026-0-01", "无法解析的日期"),
+        // The unpadded form reaches the resolver as a month too, and names
+        // the bad one rather than reporting the whole string as unreadable:
+        // `2026-0-01` and `2026-0-1` are the same month the user wrote.
+        ("2026-0-01", "农历月份 0"),
+        ("2026-0-1", "农历月份 0"),
         ("2026--13-01", "无法解析的日期"),
         ("2026--2147483648-01", "无法解析的日期"),
     ] {

@@ -1,6 +1,6 @@
 # 计划 06 — 补齐 `-d` 已宣称/应对齐 date(1) 的语法形态
 
-Status: 待实施 · Priority: P2 · Depends: 04（先修好紧凑分支的边界）
+Status: 已实施 · Priority: P2 · Depends: 04（先修好紧凑分支的边界）
 
 四个子项同属 `src/datestr.rs` 的同一份语法表，作为**一个** commit 完成。
 

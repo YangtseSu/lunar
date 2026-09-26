@@ -95,14 +95,20 @@ honoured a time it threw away.
 
 - keywords — `now`, `today`, `tomorrow`, `yesterday`;
 - epoch seconds — `@1758240000`, `@-1` (truncated towards zero, like `date -d @…`);
-- ISO 8601 — `2026-09-07`, `2026-09-07T15:30`, `20260907T1530`,
-  `2026-09-07T15:30:45+08:00`, `2026-09-07Z`; a zone with no clock means
-  midnight in that zone;
-- slashes — `2026/09/07`, `09/07/2026` (month/day/year);
+- ISO 8601 — `2026-09-07`, `2026-9-7`, `2026-09-07T15:30`, `20260907T1530`,
+  `2026-09-07T15:30:45+08:00`, `2026-09-07T15:30:45.5+08:00`, `2026-09-07Z`;
+  a month or a day may be written unpadded, a zone with no clock means
+  midnight in that zone, and a fractional second is accepted and truncated —
+  this tool keeps no clock, so `…T15:30:45.5+08:00` and `…T15:30:45+08:00` are
+  the same day;
+- slashes — `2026/09/07`, `2026/9/7`, `09/07/2026` (month/day/year);
 - relative offsets — `+3 days`, `-2 weeks`, `2 days ago`, `1 fortnight`,
   `next month`, `last year`;
-- weekday names — `monday`, `sat`, `next friday`, `last friday`;
-- a bare time of day — `15:30`, applied to today.
+- weekday names — `monday`, `sat`, `next friday`, `last friday`, and the
+  Chinese `星期六`, `周二`, `礼拜六`, `星期天` / `周天` / `礼拜天` (our
+  extension: `date(1)` has no Chinese weekday names and refuses them);
+- a bare time of day — `15:30`, `15:30 UTC`, applied to today; a zone moves
+  the day when it crosses midnight, so `23:30+0800` is not always today.
 
 A numeric zone offset uses the **POSIX** sign convention: `+0800` is 8 hours
 *behind* UTC. Offsets shorter than a day are refused rather than ignored — this
@@ -326,12 +332,10 @@ table, not something this tool can compute.
 ## Known divergences
 
 Behaviour differences from the tools the subcommands are modelled on are bugs,
-not features, and are tracked as implementation plans in [`docs/plans`](docs/plans):
-
-- `lunar date -d` — no unpadded ISO (`2026-9-7`), no fractional seconds (which
-  the module docs advertise), and no bare time with a zone (`15:30 UTC`); a bare
-  time is also silently accepted under `-l` where the rule says refuse
-  (`docs/plans/06`);
+not features, and are tracked as implementation plans in [`docs/plans`](docs/plans).
+The compatibility matrix in [`docs/parity.md`](docs/parity.md) lists every form
+`date(1)` / `cal(1)` accepts, which ones are still open, and the ones kept on
+purpose with the reason for each.
 
 ## Implementation notes
 
