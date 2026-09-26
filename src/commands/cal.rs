@@ -292,9 +292,14 @@ fn lunar_month_title(month: &LunarMonth) -> String {
 
 /// How many months to print: `-n N`, `-3`, or — for a whole-year request such
 /// as `cal -y` or `cal 2026` — all twelve.
+///
+/// `-n` is bounded below by 1 at parse time, so there is no span here to
+/// repair: it used to be `months.max(1)`, which answered `cal 2026 9 -n 0`
+/// with a month the reader did not ask for, and every other out-of-range
+/// argument in this tool is reported.
 fn month_count(args: &CalArgs) -> i32 {
     if let Some(months) = args.months {
-        return months.max(1);
+        return months;
     }
     if args.three {
         return 3;

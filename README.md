@@ -293,10 +293,10 @@ Options:
 | `年` | the whole year |
 | `年 月` | that month |
 | `-L`, `--lunar` | show lunar months instead of civil months |
-| `-R`, `--leap` | with `-L`, select the leap month |
+| `-R`, `--leap` | with `-L`/`-l`, select the leap month (refused without it) |
 | `-s`, `--sunday` / `-m`, `--monday` | first day of the week (Monday by default) |
 | `-y`, `--year` | whole year (current year by default) |
-| `-3`, `--three` / `-n N`, `--months N` | N consecutive months |
+| `-3`, `--three` / `-n N`, `--months N` | N consecutive months, centred on the month named (`N` ≥ 1) |
 | `--number` | lunar day as digits instead of 初一/廿六 |
 | `--no-month-name` | never replace 初一 with the month name |
 | `--no-festival` | never show festivals |

@@ -107,7 +107,7 @@ enum Command {
         three: bool,
 
         /// 显示连续 N 个月
-        #[arg(short = 'n', long = "months", value_name = "MONTHS")]
+        #[arg(short = 'n', long = "months", value_name = "MONTHS", value_parser = clap::value_parser!(i32).range(1..))]
         months: Option<i32>,
 
         /// 农历日用数字(默认汉字)

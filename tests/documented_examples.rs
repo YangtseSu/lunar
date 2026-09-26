@@ -1648,12 +1648,47 @@ fn month_spans_are_supported() {
     assert_eq!(titles, vec!["2026年9月", "2026年10月", "2026年11月"]);
 }
 
+/// A span of zero months is a mistake, not a request for one month.
+///
+/// `month_count` was `months.max(1)`, so `cal 2026 9 -n 0` printed a month
+/// and exited 0 — the only out-of-range argument in the tool that was repaired
+/// instead of reported. `-n` is now bounded at parse time, so the refusal
+/// comes with the value that was wrong rather than after the fact.
+#[test]
+fn a_non_positive_month_span_is_refused() {
+    for args in [
+        ["cal", "2026", "9", "-n", "0"].as_slice(),
+        ["cal", "-L", "2026", "7", "-n", "0"].as_slice(),
+        ["cal", "2026", "9", "--months", "0"].as_slice(),
+    ] {
+        let output = binary().args(args).output().expect("lunar runs");
+        assert!(
+            !output.status.success(),
+            "`lunar {}` must be refused",
+            args.join(" ")
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("0 is not in 1"),
+            "`lunar {}` names the range",
+            args.join(" ")
+        );
+    }
+    // One month is a legitimate span and still reads as one.
+    assert_eq!(
+        run(&["cal", "2026", "9", "-n", "1"])
+            .lines()
+            .filter(|l| l.ends_with('月'))
+            .count(),
+        1
+    );
+}
+
 /// `-3` / `-n N` widen a `-L` request as they do a civil one.
 ///
 /// `select_lunar_months` returned the named month as soon as it saw two
 /// positionals, so the span flags were never read: `cal -L 2026 7 -3` printed
 /// one month where `cal 2026 7 -3` printed three. The named month is now the
-/// centre of the span, clipped to the year at either end.
+/// centre of the span, kept at full length at either end of the year.
 #[test]
 fn a_lunar_month_span_centres_on_the_named_month() {
     fn titles(output: &str) -> Vec<&str> {
