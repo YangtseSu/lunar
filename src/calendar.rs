@@ -166,12 +166,20 @@ pub fn check_lunar_month(month: i32) -> Result<(), CalError> {
 
 /// The civil day a lunar year / month / day falls on.
 ///
-/// `Lunar::from_ymd` walks the lunar-new-year window, so a leap month of
-/// another year can be handed back; the result is checked to belong to
-/// `year` before it is returned. A month absent from that year is
-/// [`CalError::NoSuchLunarMonth`] (a leap month asked for without `-R` being
-/// meaningful, an ordinary one simply out of range) and a day past the end of
-/// the month is [`CalError::LunarDayOutOfRange`].
+/// The result is checked by **round trip** — the day is converted back and
+/// must be the very year / month / day that was asked for — rather than by
+/// comparing *civil* years. A lunar year and a civil year do not line up:
+/// 腊月 always begins in the following January, so 农历 2026 年腊月初一 is
+/// 公历 2027-01-08. The earlier civil-year comparison rejected every such
+/// day (336,947 of the 3,652,046 days in 1–9999), making 腊月 unreachable;
+/// 闰腊月 and two anomalous 正月 were refused the same way. The round trip is
+/// exact: over the same range it accepts all 3,652,046 days and rejects
+/// none, because it compares the whole triple instead of one field of it.
+///
+/// A month absent from that year is [`CalError::NoSuchLunarMonth`] (a leap
+/// month asked for without `-R` being meaningful, an ordinary one simply out
+/// of range) and a day past the end of the month is
+/// [`CalError::LunarDayOutOfRange`].
 pub fn solar_from_lunar(year: i32, month: i32, day: i32) -> Result<Solar, CalError> {
     check_year(year)?;
     check_lunar_month(month)?;
@@ -195,7 +203,8 @@ pub fn solar_from_lunar(year: i32, month: i32, day: i32) -> Result<Solar, CalErr
         max,
     })?;
     let solar = lunar.solar();
-    match solar.year() == year {
+    let back = solar.lunar();
+    match (back.year(), back.month(), back.day()) == (year, month, day) {
         true => Ok(solar),
         false => Err(CalError::NoSuchLunarMonth { year, month }),
     }

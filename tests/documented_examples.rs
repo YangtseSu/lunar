@@ -583,6 +583,38 @@ fn a_lunar_date_resolves_to_its_civil_day() {
     assert!(run_failing(&["date", "-l", "10000", "1", "1"]).contains("超出支持范围"));
 }
 
+/// A lunar month whose first day falls in the *next* civil year is reachable.
+///
+/// 腊月 always begins in the following January, so 农历 2026 年腊月 starts on
+/// 2027-01-08 — the lunar year and the civil year do not line up, and a
+/// conversion that insists the civil year match refuses the whole month.
+/// 闰腊月 (公元 37 年) and the two 正月 that start in December are the same
+/// shape. `-d` reads the same way, so it must agree.
+#[test]
+fn a_lunar_month_may_begin_in_the_next_civil_year() {
+    // 农历 2026 年腊月初一 is 公历 2027-01-08.
+    assert_eq!(
+        run(&["date", "-l", "2026", "12", "1"]),
+        run(&["date", "-d", "2027-01-08"])
+    );
+    assert_eq!(
+        run(&["date", "-l", "-d", "2026-12-01"]),
+        run(&["date", "-d", "2027-01-08"])
+    );
+    // 闰腊月 of 公元 37 年 starts 公元 38-01-25.
+    assert!(
+        run(&["date", "-l", "-R", "37", "12", "1"]).contains("公历: 38年1月25日"),
+        "闰腊月 is reachable"
+    );
+    // 正月 of 公元 16 年 starts 公元 15-12-30, the other direction.
+    assert!(
+        run(&["date", "-l", "16", "1", "1"]).contains("公历: 15年12月30日"),
+        "正月 that begins in December is reachable"
+    );
+    // The month still has its real length.
+    assert!(run_failing(&["date", "-l", "2026", "12", "30"]).contains("该月只有 29 天"));
+}
+
 /// `-d` reads 公历 and `-l` reads 农历, and nothing else differs between
 /// them: the same date, written either way, resolves to the same day.
 #[test]

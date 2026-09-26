@@ -125,11 +125,13 @@ window and can return a day belonging to a *neighbouring* year. `calendar::lunar
 `lunar_year_month` and `lunar_year_months` (`src/calendar.rs:232-262`) exist purely to
 filter/fix that. Any new lunar-month lookup must go through them.
 
-`lunar-rs` quirk: `Lunar::from_ymd` walks the lunar-new-year window as well, so
-`calendar::solar_from_lunar` re-checks that the resolved `Solar` still belongs to the
-requested lunar year — otherwise a leap month of the neighbouring year is accepted and
-silently answers with a day from the wrong year. Use that wrapper, never
-`Lunar::from_ymd`, for any lunar→civil lookup.
+`lunar-rs` quirk: a lunar year and a civil year do **not** line up — 腊月 always begins
+in the following January, so 农历 2026 年腊月初一 is 公历 2027-01-08. `calendar::solar_from_lunar`
+therefore validates by **round trip**: convert the resolved `Solar` back to a `Lunar` and require
+the whole year / month / day triple to match. Comparing *civil* years instead refuses every
+such day — 336,947 of the 3,652,046 days in 1–9999 — and makes 腊月, 闰腊月 and the two 正月
+that begin in December unreachable. Use that wrapper, never `Lunar::from_ymd`, for any
+lunar→civil lookup.
 
 ## Key Directories
 
