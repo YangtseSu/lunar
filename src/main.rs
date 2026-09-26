@@ -29,15 +29,19 @@ use crate::calendar::{MAX_YEAR, MIN_YEAR};
 use crate::commands::{cal, date};
 
 /// Token help, printed by `lunar date --help-format`.
-const FORMAT_HELP: &str = "\
-格式令牌(在 -f/--format 中):
-%Y 公历年   %m 公历月   %d 公历日   %A 星期几单字(一~日)
-%G 农历年干支(丙午)  %M 农历月汉字(正月/闰六月/腊月)  %N 农历日汉字(初一)
-%n 农历日数字(23)  %H 干支月(丙申)  %D 干支日(辛巳)
-%S 生肖(马)  %Q 节气(当日无则空)  %% 字面%
-%A 只给单字，前缀自理: 星期%A=星期一 / 周%A=周一 / 礼拜%A=礼拜一
-\\n 换行  \\t 制表符
-例: lunar date -f '%G年%M%N，星期%A，%Q' -d 2026-09-07";
+const FORMAT_HELP: &str = concat!(
+    "格式令牌(在 -f/--format 中):\n",
+    "%Y 公历年   %m 公历月   %d 公历日   %A 星期几单字(一~日)\n",
+    "%G 农历年干支(丙午)  %M 农历月汉字(正月/闰六月/腊月)  %N 农历日汉字(初一)\n",
+    "%n 农历日数字(23)  %H 干支月(丙申)  %D 干支日(辛巳)\n",
+    "%S 生肖(马)  %Q 节气(当日无则空)  %% 字面%\n",
+    "%A 只给单字，前缀自理: 星期%A=星期一 / 周%A=周一 / 礼拜%A=礼拜一\n",
+    concat!(
+        r"\n 换行  \t 制表符  \r 回车  \% 字面%(同 %%)  \\ 字面反斜杠",
+        "\n",
+    ),
+    "例: lunar date -f '%G年%M%N，星期%A，%Q' -d 2026-09-07",
+);
 
 /// A Chinese lunisolar calendar CLI: `date`-style day profiles and `cal`-style
 /// grids.

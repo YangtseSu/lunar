@@ -179,9 +179,10 @@ $ lunar date -f '周%A 农历%M%N（日序 %n），生肖%S，节气：%Q' -d 20
 | `%%` | 字面 `%` |
 
 `%A` only yields the weekday character, so any prefix works: `星期%A` = 星期一,
-`周%A` = 周一, `礼拜%A` = 礼拜一. A backslash escapes the next character, so
-`\n` and `\t` produce a newline and a tab. `lunar date --help-format` prints the
-same table.
+`周%A` = 周一, `礼拜%A` = 礼拜一. A backslash escapes the next character and
+yields it: `\n` a newline, `\t` a tab, `\r` a carriage return, `\%` a literal
+`%` (as `%%` does) and `\\` a literal backslash. `lunar date --help-format`
+prints the same table.
 
 ## `lunar cal`
 

@@ -18,8 +18,10 @@
 //! | `%Q`  | 节气, empty when the day has none |
 //! | `%%`  | literal `%` |
 //!
-//! `\` escapes the next character, so `\n` and `\t` produce a newline and a
-//! tab. Every name the engine owns is rendered in the chosen language.
+//! `\` escapes the next character and yields it: `\n` a newline, `\t` a tab,
+//! `\r` a carriage return, and `\%` (like `%%`) a literal `%`. `\\` is a
+//! literal backslash. Every name the engine owns is rendered in the chosen
+//! language.
 
 use std::fmt::Write as _;
 
@@ -35,14 +37,17 @@ pub fn expand(format: &str, solar: Solar, out: &mut String) {
 
     while let Some(ch) = chars.next() {
         match ch {
+            // A backslash escapes the next character: it yields that
+            // character, and only `n`, `t` and `r` have a second meaning.
+            // `\%` used to fall through to the catch-all and print both
+            // characters, so the one escape a `%` needs — the token is
+            // introduced by `%`, so a literal one cannot be written without
+            // it — did not work. `%%` does the same job and always did.
             '\\' => match chars.next() {
                 Some('n') => out.push('\n'),
                 Some('t') => out.push('\t'),
                 Some('r') => out.push('\r'),
-                Some(other) => {
-                    out.push('\\');
-                    out.push(other);
-                }
+                Some(other) => out.push(other),
                 None => out.push('\\'),
             },
             '%' => {

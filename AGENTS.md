@@ -505,8 +505,11 @@ of unrelated work — surface them, or fix them deliberately with a test.
   offset had been applied. A new `CalError::SubDayUnit` refuses them and names the unit. The
   tool keeps a date and no clock, so there is nothing for a sub-day offset to move — a
   silent no-op was the one answer that could not be defended.
-- `src/format.rs:20-21` no longer claims `\%` yields a literal `%`; the code emits `\%`
-  (two chars). Use `%%`. `\r` works but is still undocumented.
+- ~~**`\%` printed two characters.**~~ **Fixed.** The escape arm had meanings for `n`, `t`
+  and `r` and a catch-all that pushed the backslash *and* the character, so `\%` emitted
+  `\%`. Since `%` introduces every token, that was the one escape a literal `%` needed and
+  it did not work. A backslash now yields the character it escapes — `\n`, `\t`, `\r`, `\%`
+  and `\\` — and all three user-facing tables say so.
 - ~~The same bad date yields different messages depending on the input channel.~~ **Fixed.**
   Both channels now resolve through `datestr`, so `2023-02-30` is `公历 2023-02-30
   不存在` either way, and out-of-range components give `月份 13 非法 (应为 1–12)` on both.

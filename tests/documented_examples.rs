@@ -810,6 +810,30 @@ fn a_sub_day_offset_is_refused_rather_than_ignored() {
     }
 }
 
+/// A backslash yields the character it escapes.
+///
+/// `\n`, `\t` and `\r` had meanings and `\%` fell through to a catch-all that
+/// printed *both* characters — so the one escape a `%` needs, given that `%`
+/// introduces every token, did not work. Every escape now yields its
+/// character, and `\\` is how a literal backslash is written.
+#[test]
+fn a_backslash_yields_the_character_it_escapes() {
+    let expand = |format: &str| run(&["date", "-d", "2026-09-07", "-f", format]);
+    assert_eq!(expand("\\%"), "%");
+    assert_eq!(expand("%%"), "%");
+    assert_eq!(expand("\\\\"), "\\");
+    assert_eq!(expand("a\\nb"), "a\nb");
+    assert_eq!(expand("a\\tb"), "a\tb");
+    assert_eq!(expand("a\\rb"), "a\rb");
+    // An escaped token letter is that letter, not the token.
+    assert_eq!(expand("\\Y"), "Y");
+    // A trailing backslash is itself.
+    assert_eq!(expand("a\\"), "a\\");
+    // The tokens themselves are untouched.
+    assert_eq!(expand("%Y"), "2026");
+    assert_eq!(expand("%G年%M%N"), "丙午年七月廿六");
+}
+
 /// A time of day is part of the 公历 grammar. Under `-l` it is refused rather
 /// than dropped, so a lunar date never looks like it honoured a time it threw
 /// away.
