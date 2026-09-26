@@ -1534,6 +1534,45 @@ fn help_format_lists_the_tokens() {
     assert!(help.contains("\\n 换行"));
 }
 
+/// The token help does not depend on a zone it never uses.
+///
+/// `--help-format` was answered from inside the dispatch, which runs after
+/// `tz::today()`, so a typo'd `TZ` made the one page that lists the tokens
+/// unreadable — exactly when a reader is most likely to want it. The flag is
+/// now short-circuited before the reference day is resolved. Every command
+/// that *does* need a day still reports the zone problem.
+#[test]
+fn help_format_prints_without_a_readable_zone() {
+    for tz in ["Asia/Shangahi", "Not/AZone", "!!!"] {
+        let output = binary()
+            .args(["date", "--help-format"])
+            .env("TZ", tz)
+            .output()
+            .expect("lunar runs");
+        assert!(
+            output.status.success(),
+            "`--help-format` prints with TZ={tz}, got: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stdout).contains("%Y 公历年"),
+            "TZ={tz} still prints the tokens"
+        );
+    }
+    // The commands that name a day are unaffected: they still need the zone.
+    for args in [
+        ["date", "-d", "2026-09-07"].as_slice(),
+        ["date"].as_slice(),
+        ["cal", "2026", "9"].as_slice(),
+    ] {
+        assert!(
+            run_failing_with_tz("Asia/Shangahi", args).contains("无法读取时区"),
+            "`lunar {}` still reports the zone",
+            args.join(" ")
+        );
+    }
+}
+
 /// A zone the engine cannot read is reported as a zone problem.
 ///
 /// `TZ`, an unreadable system zone, a clock before 1970 and a local year

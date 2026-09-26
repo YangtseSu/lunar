@@ -143,6 +143,19 @@ enum Command {
 
 fn main() -> ExitCode {
     let cli = Cli::parse();
+
+    // The token help needs no date and no zone, so it is answered before the
+    // reference day is resolved. It used to be printed from inside the
+    // dispatch, which put it *after* `tz::today()` — so a machine with an
+    // unreadable `TZ` could not read the one page that would explain the
+    // tokens it was otherwise refusing to expand.
+    if let Command::Date { help_format, .. } = &cli.command
+        && *help_format
+    {
+        println!("{FORMAT_HELP}");
+        return ExitCode::SUCCESS;
+    }
+
     let today = match tz::today() {
         Ok(today) => today,
         Err(error) => {
@@ -158,25 +171,19 @@ fn main() -> ExitCode {
             format,
             lunar,
             leap,
-            help_format,
+            help_format: _,
             positional,
-        } => {
-            if *help_format {
-                println!("{FORMAT_HELP}");
-                return ExitCode::SUCCESS;
-            }
-            date::run(
-                &date::DateArgs {
-                    date: date.clone(),
-                    format: format.clone(),
-                    lunar: *lunar,
-                    leap: *leap,
-                    positional: positional.clone(),
-                },
-                today,
-                &mut out,
-            )
-        }
+        } => date::run(
+            &date::DateArgs {
+                date: date.clone(),
+                format: format.clone(),
+                lunar: *lunar,
+                leap: *leap,
+                positional: positional.clone(),
+            },
+            today,
+            &mut out,
+        ),
         Command::Cal {
             lunar,
             leap,
