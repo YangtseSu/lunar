@@ -744,6 +744,46 @@ fn day_relative_forms_are_unaffected_by_the_calendar_flag() {
     }
 }
 
+/// An epoch is read as the day `date -d @…` reads it.
+///
+/// The fraction is dropped and the whole seconds truncated **towards zero**,
+/// so `@-1` — one second before the epoch — is 1970-01-01 and not
+/// 1969-12-31. `div_euclid` floors, and the test suite had no negative
+/// timestamp to notice: every negative answer came out a day early.
+#[test]
+fn an_epoch_is_truncated_towards_zero() {
+    for (epoch, expected) in [
+        ("@0", "1970-01-01"),
+        ("@1", "1970-01-01"),
+        ("@-0.5", "1970-01-01"),
+        ("@-1", "1970-01-01"),
+        ("@-0.9", "1970-01-01"),
+        ("@86399", "1970-01-01"),
+        ("@86400", "1970-01-02"),
+        ("@-86400", "1969-12-31"),
+        ("@-86400.5", "1969-12-31"),
+        ("@-86401", "1969-12-31"),
+        ("@-172800", "1969-12-30"),
+        ("@1788000000", "2026-08-29"),
+        ("@1788000000.25", "2026-08-29"),
+    ] {
+        assert_eq!(
+            run(&["date", "-d", epoch, "-f", "%Y-%m-%d"]),
+            expected,
+            "`-d {epoch}` is {expected}"
+        );
+    }
+    // A fraction never moves the answer into another day, and `-l` does not
+    // change it: an epoch names an instant, not a date in a calendar.
+    for epoch in ["@-0.5", "@-86400", "@1788000000.25"] {
+        assert_eq!(
+            run(&["date", "-d", epoch, "-f", "%Y-%m-%d"]),
+            run(&["date", "-l", "-d", epoch, "-f", "%Y-%m-%d"]),
+            "`-d {epoch}` must not depend on `-l`"
+        );
+    }
+}
+
 /// A bare `next` / `last` period moves that period, as `date(1)` does.
 ///
 /// `parse_weekday` already handled `next friday`, so the grammar looked

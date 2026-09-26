@@ -145,12 +145,20 @@ fn parse_keyword(lower: &str, reference: CivilDate) -> Result<Option<CivilDate>,
     Ok(Some(reference.add_days(delta)))
 }
 
-/// `@seconds[.fraction]`, truncated towards the epoch day.
+/// `@seconds[.fraction]`, read as the day `date(1)` reads it.
+///
+/// The fraction is dropped and the whole seconds are then **truncated
+/// towards zero**, which is what `date -d @…` does: `@-1` is one second
+/// before the epoch and GNU date answers 1970-01-01, not 1969-12-31. This
+/// used to `div_euclid`, which floors, so every negative timestamp landed a
+/// day early — `@-86400` read as 1969-12-30 where `date(1)` says 1969-12-31.
+///
+/// The `-l` channel and the range check are unaffected: an epoch names an
+/// instant, not a date written in either calendar.
 fn parse_epoch(rest: &str, input: &str) -> Result<CivilDate, CalError> {
     let whole = rest.split('.').next().unwrap_or(rest);
     let seconds: i64 = whole.parse().map_err(|_| invalid(input))?;
-    let day = seconds.div_euclid(civil::SECS_PER_DAY);
-    let date = CivilDate::from_epoch_day(day);
+    let date = CivilDate::from_epoch_day(seconds / civil::SECS_PER_DAY);
     validate(date, input)
 }
 
