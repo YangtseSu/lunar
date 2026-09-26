@@ -394,7 +394,7 @@ fn parse_relative(lower: &str, reference: CivilDate, input: &str) -> Result<Civi
         text = rest.trim().to_string();
     }
 
-    // A bare unit or a bare `next`/`last` month or year moves that period.
+    // A bare unit, or a bare `next` / `last` before one, moves that period.
     let tokens: Vec<&str> = text.split_whitespace().collect();
     if tokens.is_empty() {
         return Err(invalid(input));
@@ -404,7 +404,11 @@ fn parse_relative(lower: &str, reference: CivilDate, input: &str) -> Result<Civi
     let mut index = 0;
     let mut moved = false;
     while index < tokens.len() {
-        let (unit, count) = match tokens[index].parse::<i32>() {
+        // `next` / `last` take the unit that follows them and move one step
+        // that way. `next friday` never reaches here — the weekday arm runs
+        // first — so this is the bare-period form the grammar advertises:
+        // `next month`, `last year`, `next week`.
+        let (mut unit, count) = match tokens[index].parse::<i32>() {
             Ok(value) => {
                 let unit = *tokens.get(index + 1).ok_or_else(|| invalid(input))?;
                 index += 2;
@@ -415,6 +419,19 @@ fn parse_relative(lower: &str, reference: CivilDate, input: &str) -> Result<Civi
                 index += 1;
                 (unit, sign)
             }
+        };
+        let count = match unit {
+            "next" => {
+                unit = *tokens.get(index).ok_or_else(|| invalid(input))?;
+                index += 1;
+                1
+            }
+            "last" => {
+                unit = *tokens.get(index).ok_or_else(|| invalid(input))?;
+                index += 1;
+                -1
+            }
+            _ => count,
         };
         date = apply_unit(date, unit, count, input)?;
         moved = true;

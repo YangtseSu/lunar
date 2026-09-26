@@ -479,9 +479,10 @@ of unrelated work — surface them, or fix them deliberately with a test.
   forms looked broken. Every `±hh:mm` and `±hhmm` is accepted now, and the day moves when
   the zone crosses midnight — forwards or backwards. Note the sign is the **POSIX** one the
   module documents: `+0800` is 8 hours *behind* UTC, the opposite of ISO 8601.
-- **`-d` rejects `next month` / `next week` / `last year`** — advertised in the README and
-  reachable at `src/datestr.rs:383`. `apply_unit` has no `next`/`last` arm, so the bare word hits the
-  error arm. (`next friday` works, because `parse_weekday` runs first.)
+- ~~**`-d` rejects `next month` / `next week` / `last year`.**~~ **Fixed.** `parse_weekday`
+  already handled `next friday`, so the grammar looked covered, but `apply_unit` had no
+  `next`/`last` arm and the bare word hit the error branch. The unit loop now consumes the
+  word and takes the period that follows it, matching `date(1)` on every period.
 - **`MM/DD/YYYY` is unreachable.** The short-year branch (`src/datestr.rs:175-190`) matches
   any 1–3-digit-leading `/`-separated triple first, so `09/07/2026` parses as year 9 and
   then fails validation. The README advertises this form.

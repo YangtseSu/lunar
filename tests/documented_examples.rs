@@ -671,7 +671,9 @@ fn day_relative_forms_are_unaffected_by_the_calendar_flag() {
         "@1788000000",
         "monday",
         "next friday",
-        "+3 days",
+        "next month",
+        "last year",
+        "next week",
     ] {
         assert_eq!(
             run(&["date", "-d", form]),
@@ -679,6 +681,42 @@ fn day_relative_forms_are_unaffected_by_the_calendar_flag() {
             "`-d {form}` must not depend on `-l`"
         );
     }
+}
+
+/// A bare `next` / `last` period moves that period, as `date(1)` does.
+///
+/// `parse_weekday` already handled `next friday`, so the grammar looked
+/// covered — but `apply_unit` had no `next`/`last` arm and the bare word hit
+/// the error branch, so `next month` (which the README lists) was rejected.
+///
+/// The forms resolve against the reference day, so the assertion is a
+/// *relation* to it rather than a fixed date: pinning a calendar date here
+/// would make the test fail every time the day it was written on came round
+/// again.
+#[test]
+fn a_bare_next_or_last_moves_that_period() {
+    let today = run(&["date", "-d", "today", "-f", "%Y-%m-%d"]);
+    // Each form must agree with the counted form it abbreviates.
+    for (bare, counted) in [
+        ("next day", "1 day"),
+        ("last day", "1 day ago"),
+        ("next week", "7 days"),
+        ("last week", "7 days ago"),
+        ("next fortnight", "14 days"),
+        ("next month", "1 month"),
+        ("last month", "1 month ago"),
+        ("next year", "1 year"),
+        ("last year", "1 year ago"),
+    ] {
+        assert_eq!(
+            run(&["date", "-d", bare, "-f", "%Y-%m-%d"]),
+            run(&["date", "-d", counted, "-f", "%Y-%m-%d"]),
+            "`-d {bare}` from {today} is the same day as `-d {counted}`"
+        );
+    }
+    // The word needs a period to move.
+    assert!(run_failing(&["date", "-d", "next"]).contains("无法解析"));
+    assert!(run_failing(&["date", "-d", "last"]).contains("无法解析"));
 }
 
 /// A time of day is part of the 公历 grammar. Under `-l` it is refused rather
