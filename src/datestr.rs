@@ -52,8 +52,9 @@ use crate::civil::{self, CivilDate};
 /// weekday name in Chinese, and refuses all of them. The table carries the
 /// three prefixes a reader writes (`星期X`, `周X`, `礼拜X`) over 一…日 plus
 /// the `天` variant, because the same suffix has to answer whichever prefix
-/// a user reaches for; it used to carry 星期日 / 星期天 / 礼拜天 / 周一 and
-/// nothing else, so `周六` and `星期二` were unparsable.
+/// a user reaches for: `周六` and `星期二` are the same request written two
+/// ways, and a table that admitted only some of them made half the forms
+/// unparsable.
 const WEEKDAYS: [(&str, i32); 41] = [
     ("sunday", 0),
     ("sun", 0),
@@ -277,9 +278,9 @@ fn parse_keyword(lower: &str, reference: CivilDate) -> Result<Option<CivilDate>,
 ///
 /// The fraction is dropped and the whole seconds are then **truncated
 /// towards zero**, which is what `date -d @…` does: `@-1` is one second
-/// before the epoch and GNU date answers 1970-01-01, not 1969-12-31. This
-/// used to `div_euclid`, which floors, so every negative timestamp landed a
-/// day early — `@-86400` read as 1969-12-30 where `date(1)` says 1969-12-31.
+/// before the epoch and GNU date answers 1970-01-01, not 1969-12-31. The
+/// rule therefore is "the day holding the timestamp", not "the day at or
+/// below it", and a negative timestamp never lands a day early.
 ///
 /// The `-l` channel and the range check are unaffected: an epoch names an
 /// instant, not a date written in either calendar.
@@ -435,9 +436,7 @@ fn parse_absolute(
     // zone, `15:30 UTC` — the day that time falls on *in that zone*, which
     // is what `date(1)` answers and is not always today. It goes through
     // [`finish`] so the zone shift and the `-l` refusal are the two rules
-    // every other time of day already obeys. The branch used to answer with
-    // today whatever the string said and accepted it under `-l`, where a
-    // time of day is refused.
+    // every other time of day already obeys.
     //
     // The **colon** is what makes it a time rather than a year. `2026` and
     // `1530` are bare years the branch above already answered as the
@@ -720,12 +719,12 @@ fn parse_relative(lower: &str, reference: CivilDate, input: &str) -> Result<Civi
 
 /// Applies one relative unit.
 ///
-/// Sub-day units are **rejected**, not ignored. They used to return the date
-/// unchanged, so `90 minutes ago` answered with today and read as though the
-/// offset had been applied. This tool has no time of day — a day is the whole
-/// of what it stores — so an offset shorter than a day has nothing to move,
-/// and saying so is the only honest answer. `date(1)` accepts them because it
-/// keeps a clock; this does not.
+/// Sub-day units are **rejected**, not ignored. This tool has no time of
+/// day — a day is the whole of what it stores — so an offset shorter than a
+/// day has nothing to move, and refusing it is the only honest answer:
+/// `90 minutes ago` returned unchanged would read as though the offset had
+/// been applied. `date(1)` accepts them because it keeps a clock; this does
+/// not.
 fn apply_unit(date: CivilDate, unit: &str, count: i32, input: &str) -> Result<CivilDate, CalError> {
     let unit = unit.trim_end_matches(['.', ',']);
     match unit {

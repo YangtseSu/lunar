@@ -332,7 +332,7 @@ fn lunar_months_of(year: i32) -> Result<Vec<LunarMonth>, CalError> {
 }
 
 /// `农历 丙午年 七月`, with `闰` for a leap month; the year pillar and the
-/// month name are rendered in the chosen language.
+/// month name come from the engine in the Chinese it already uses.
 fn lunar_month_title(month: &LunarMonth) -> String {
     let first = month.get_first_day();
     let gan_zhi = first

@@ -3,8 +3,8 @@
 //!
 //! Where the two disagree the engine wins: a published sample prints 芒种 on
 //! the wrong day and omits two solar terms, and those are *not* reproduced
-//! here. (The sample also prints 中元 three days early; the cell now reads
-//! 中元节 on 七月十五, which is where the engine puts it.)
+//! here. 中元 is the third: the cell reads 中元节 on 七月十五, which is where
+//! the engine puts it.
 //!
 //! Every grid expectation is captured from the binary's own output, never
 //! hand-computed: the cells are padded by display width, and a CJK label
@@ -609,11 +609,10 @@ fn colour_adds_escapes_and_nothing_else() {
 /// last decides, and `--color` takes `auto` / `always` / `never` like
 /// `cal(1)`'s.
 ///
-/// Both flags were booleans matched with `(true, _) => Always` ahead of
-/// `(false, true) => Never`, so they no longer carried the order they were
-/// written in: `--color --no-color` coloured, and a comment claimed the
-/// opposite. `overrides_with` on both sides keeps the order; `require_equals`
-/// keeps `--color` from eating the year that follows it.
+/// Last-wins is clap's `overrides_with` on *both* sides: each flag clears the
+/// other, so a second spelling of the same decision is the one that survives
+/// however the pairs are matched. `require_equals` keeps `--color` from
+/// eating the year that follows it.
 #[test]
 fn the_color_flags_take_the_last_word() {
     let marked = |args: &[&str]| run(args).contains('\u{1b}');
@@ -775,10 +774,11 @@ fn the_two_channels_differ_only_in_the_calendar_they_read() {
 /// `MM/DD/YYYY` is the US order the grammar lists, and it is read as such.
 ///
 /// The short-year branch claims any `/`-separated triple whose first field is
-/// one to three digits, so `09/07/2026` arrived as the year 9 with a day of
-/// 2026 and then failed validation. The US order is now tried first, and a
-/// four-digit *last* field is what makes it one — so `2026/09/07` and
-/// `1-01-01` still reach the branches that own them.
+/// one to three digits, so the US order is tried *before* it — otherwise
+/// `09/07/2026` arrives as the year 9 with a day of 2026 and fails
+/// validation. A four-digit *last* field is what makes the triple the US
+/// order, so `2026/09/07` and `1-01-01` still reach the branches that own
+/// them.
 #[test]
 fn the_us_slash_order_is_read_as_month_day_year() {
     for (form, expected) in [
@@ -997,14 +997,11 @@ fn a_huge_relative_offset_is_reported_not_wrapped() {
 
 /// A long run of digits is not a compact `YYYYMMDD` date.
 ///
-/// The compact branch read its eight fields and stopped looking, so it claimed
-/// *any* input beginning with eight digits: `1758240000` became 1758-24-00 and
-/// `2147483647 days` became 2147-48-36, each reporting a month the user never
-/// wrote. `date(1)` rejects both. The compact form is now claimed only at a
-/// word boundary, so an input that is not one falls through to the branches
-/// that can answer it — a bare timestamp has no reading and is reported, while
+/// The compact branch reads eight fields and stops looking, so it is claimed
+/// only at a word boundary: an input that merely *begins* with eight digits is
+/// not one. `1758240000` is a bare timestamp with no reading, and
 /// `2147483647 days` is a well-formed relative offset whose *result* is out of
-/// range, and is reported as such.
+/// range — `date(1)` rejects both, and each is reported as what it is.
 #[test]
 fn a_long_digit_run_is_not_a_compact_date() {
     // A timestamp missing its `@` is not a date; `date(1)` says `invalid date`
@@ -1361,11 +1358,13 @@ fn chinese_weekday_names_are_accepted() {
 
 /// A numeric zone offset shifts the day, not just the clock.
 ///
-/// `split_zone` used to hand `zone_offset` a slice starting one byte *before*
-/// the sign, so the sign was never seen and every `±hh:mm` was rejected —
-/// `Z`/`UTC`/`GMT` still parsed, which is why only the numeric forms were
-/// broken. The sign convention is the POSIX one the module documents: `+0800`
-/// is 8 hours *behind* UTC, so a 23:30 reading moves to the next day.
+/// Every numeric form carries a sign, and the sign is part of the offset
+/// `zone_offset` is given, so the zone is split *after* its sign rather than
+/// before it: a slice that began at the sign would leave every `±hh:mm` with
+/// a bare digit string, while the named zones `Z` / `UTC` / `GMT` — which
+/// carry no sign — would keep parsing. The sign convention is the POSIX one
+/// the module documents: `+0800` is 8 hours *behind* UTC, so a 23:30 reading
+/// moves to the next day.
 #[test]
 fn a_numeric_zone_offset_is_accepted_and_shifts_the_day() {
     for zone in ["+08:00", "+0800", "-05:00", "-0500", "Z", "UTC", "GMT"] {
@@ -1569,11 +1568,11 @@ fn civil_overlay_grid_matches_documented_output() {
 ///
 /// The year is the point of the sweep. 2026 alone is a year both calendars
 /// agree about; 100, 1300 and 1500 are not, because the engine follows the
-/// Julian leap rule below 1600 and this test's own month-length helper used to
-/// compute the Gregorian one — so the assertion was pinned to a length the
-/// tool never used, and would have failed on any pre-1600 February the moment
-/// the sweep reached one. 1582 is in the sweep for the other reason: it is
-/// the one month the engine counts shorter than the calendar has.
+/// Julian leap rule below 1600 — so the number of days the grid may draw has
+/// to be the one the binary reports, not a local month-length helper
+/// computing the Gregorian February, or the assertion is pinned to a length
+/// the tool never uses. 1582 is in the sweep for the other reason: it is the
+/// one month the engine counts shorter than the calendar has.
 #[test]
 fn civil_grid_shows_every_day_of_the_month() {
     for year in [1, 100, 1300, 1500, 1582, 2026, 9999] {
@@ -1777,10 +1776,12 @@ fn leap_month_is_only_reachable_with_the_leap_flag() {
 
 /// `-R` names a 闰月, which is a 农历 concept: it is refused without `-l`.
 ///
-/// It used to be accepted and ignored, so `date -R -d 2020-04-01` printed the
-/// 公历 date and `cal -R 2020 4` printed 2020年4月 — a flag that read as
-/// agreement while changing nothing, and whose own help says (-l 时).
-/// `-s`/`-m` were made mutually exclusive for the same reason; this is the
+/// A flag whose help reads (-l 时) has to mean something, and silently
+/// ignoring it is the one outcome the reader cannot detect: `date -R -d
+/// 2020-04-01` would print the 公历 date and `cal -R 2020 4` would print
+/// 2020年4月, both looking like agreement. So it is refused, and the refusal
+/// names `--lunar`, the flag that would make it meaningful.
+/// `-s`/`-m` are made mutually exclusive for the same reason; this is the
 /// one-sided version, since `-l` alone is perfectly meaningful.
 #[test]
 fn the_leap_flag_requires_the_lunar_flag() {
@@ -1812,9 +1813,10 @@ fn the_leap_flag_requires_the_lunar_flag() {
 
 /// A lunar month outside `1..=12` is reported, not indexed.
 ///
-/// The month is a table lookup on the way to the error message, so `0`, `13`
-/// and `i32::MIN` used to panic instead of failing — an exit code of 101
-/// rather than 1. `--` passes a negative number past clap's own parser.
+/// The month reaches a table lookup on the way to the error message, so `0`,
+/// `13` and `i32::MIN` are values the code must range-check *before* it
+/// indexes: a panic there is an exit code of 101 rather than 1. `--` passes a
+/// negative number past clap's own parser, so the check is the tool's.
 #[test]
 fn out_of_range_lunar_months_are_reported_not_indexed() {
     for month in ["0", "13", "-13", "-2147483648"] {
@@ -1824,9 +1826,9 @@ fn out_of_range_lunar_months_are_reported_not_indexed() {
         );
     }
     // `date` derives the leap month by negating the one the user wrote, and
-    // `-R` did not check the month first: `i32::MIN` has no absolute value, so
-    // `date -l -R 2026 -- -2147483648 1` panicked. The positionals now report
-    // the number the user wrote, through the message `cal` already used.
+    // `-R` checks the month first: `i32::MIN` has no absolute value, so the
+    // positionals have to report the number the user wrote, through the
+    // message `cal` already used.
     for month in ["0", "13", "-13", "-2147483648"] {
         assert!(
             run_failing(&["date", "-l", "-R", "2026", "--", month, "1"]).contains("农历月份"),
@@ -1965,14 +1967,15 @@ fn the_reform_gap_renders_as_absent_days() {
 
 /// The lunar view's date band is the engine's own, day for day.
 ///
-/// It used to be stepped with `add_days` — proleptic-Gregorian arithmetic —
-/// while the content band and the month length came from the engine, which
-/// uses the Julian leap rule before 1600 and skips the reform days of 1582.
-/// Two calendars in one grid: `cal -L 1300 2` drew 36 cells for a 30-day
-/// month, 6 of them contradicting `lunar date`, and ended on the *next*
-/// month's 初一. This pins the first and the last label to the day the engine
-/// converts the same lunar day to, which is the only claim that can fail when
-/// the two calendars drift.
+/// The date band is stepped in the engine's own calendar, never in
+/// `add_days` — proleptic-Gregorian arithmetic. The content band and the
+/// month length come from the engine, which uses the Julian leap rule before
+/// 1600 and skips the reform days of 1582, and a band stepped by any other
+/// rule would put two calendars in one grid: `cal -L 1300 2` would draw 36
+/// cells for a 30-day month, 6 of them contradicting `lunar date`, and would
+/// end on the *next* month's 初一. So the first and the last label are pinned
+/// to the day the engine converts the same lunar day to, which is the only
+/// claim that can fail when the two calendars drift.
 #[test]
 fn the_lunar_view_labels_the_days_the_engine_converts() {
     for (year, month) in [
@@ -2100,11 +2103,11 @@ fn unsupported_date_strings_are_reported() {
 /// crash.
 ///
 /// The grammar is matched on **bytes** — `bytes[4]` is the first separator —
-/// and then sliced as a `&str` at that offset, so any character straddling
-/// one panicked with "end byte index 10 is not a char boundary" and exit
-/// 101. Every form is now read through a helper that checks the boundary and
-/// the digits, and answers `无法解析的日期` like any other input it has no
-/// reading for.
+/// and then sliced as a `&str` at that offset, so every form is read through a
+/// helper that checks the boundary and the digits before it slices: a
+/// character straddling the offset is not a boundary, and panicking there is
+/// an exit code of 101 rather than a refusal. Such an input has no reading, so
+/// it is answered `无法解析的日期` like any other.
 #[test]
 fn a_multi_byte_character_in_a_date_field_is_reported_not_fatal() {
     for form in [
@@ -2221,10 +2224,10 @@ fn a_bare_year_prints_the_whole_year() {
 
 /// A span of zero months is a mistake, not a request for one month.
 ///
-/// The span count used to be `months.max(1)`, so `cal 2026 9 -n 0` printed a
-/// month and exited 0 — the only out-of-range argument in the tool that was
-/// repaired instead of reported. `-n` is bounded at parse time, so the refusal
-/// comes with the value that was wrong rather than after the fact.
+/// A span count is bounded at parse time, so a refusal names the value that
+/// was wrong rather than arriving after the fact, and `cal 2026 9 -n 0` is
+/// reported like every other out-of-range argument instead of being repaired
+/// into a one-month window: the user asked for no months, not for one.
 #[test]
 fn a_non_positive_month_span_is_refused() {
     for args in [
@@ -2310,7 +2313,8 @@ fn a_lunar_span_centres_or_starts_as_the_flag_says() {
     );
     // A centred window at the start of a year takes the 腊月 before it, and
     // at the end it runs into the next 正月 — the length is kept either way,
-    // which is what the old shift-back could not do at both ends at once.
+    // which is why the window is built from the continuous month sequence and
+    // not from the year it names.
     assert_eq!(
         lunar_titles(&run(&["cal", "-L", "2026", "1", "-3"])),
         vec!["农历 乙巳年 腊月", "农历 丙午年 正月", "农历 丙午年 二月"]
@@ -2336,10 +2340,10 @@ fn a_lunar_span_centres_or_starts_as_the_flag_says() {
 /// A lunar span walks the continuous month sequence, across the new year.
 ///
 /// 腊月 always begins in the following January, so the sequence's own
-/// successor to 丙午年 腊月 is 丁未年 正月. The old view was bounded by the
-/// year it names and shifted a window back to keep its length, so a span
-/// could never show two ganzhi years — and the title carries the year, so
-/// crossing is readable rather than ambiguous.
+/// successor to 丙午年 腊月 is 丁未年 正月: a window is a run of consecutive
+/// lunar months, and it is built from that sequence rather than from the year
+/// it names, so a span can show two ganzhi years. The title carries the year,
+/// so crossing is readable rather than ambiguous.
 #[test]
 fn the_lunar_span_crosses_the_lunar_new_year() {
     assert_eq!(
@@ -2357,11 +2361,10 @@ fn the_lunar_span_crosses_the_lunar_new_year() {
 
 /// A missing month comes from the reference day, the way `cal(1)`'s does.
 ///
-/// `cal 2026` used to start in January whatever today was, and `cal 2026 -3`
-/// centred on January. `cal(1)` fills the month from today: `cal -3 2025`
-/// prints 八月, 九月, 十月 2025. The reference day is not an input the suite
-/// can pin, so the test asks the binary which month it is and checks the
-/// window against that.
+/// `cal(1)` fills a missing month from today, not from January: `cal -3 2025`
+/// prints 八月, 九月, 十月 2025, and `cal 2026 -3` centres on today's month in
+/// 2026. The reference day is not an input the suite can pin, so the test
+/// asks the binary which month it is and checks the window against that.
 #[test]
 fn the_missing_month_comes_from_today() {
     let today = run(&["date", "-d", "today", "-f", "%Y %m"]);

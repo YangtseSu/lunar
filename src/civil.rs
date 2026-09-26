@@ -47,8 +47,8 @@ pub fn days_from_civil(y: i32, m: i32, d: i32) -> i64 {
 /// Inverse of [`days_from_civil`]: the civil date for a day number relative to
 /// the Unix epoch.
 ///
-/// The year is computed in `i64` and named when it no longer fits the `i32` it
-/// is stored in: a day count the user typed (`+2147483647 fortnights`, the
+/// The year is computed in `i64` and named when it outgrows the `i32` it is
+/// stored in: a day count the user typed (`+2147483647 fortnights`, the
 /// twenty-seventh of which carries the year out of range) reaches a year past
 /// the representable one, and a wrapped year is a year nobody asked for.
 pub fn civil_from_days(z: i64) -> Result<(i32, i32, i32), CalError> {
@@ -152,7 +152,7 @@ impl CivilDate {
     /// This date plus `delta` days.
     ///
     /// The day count is added in `i64` and the year it reaches is named when
-    /// that year no longer fits an `i32`; see [`civil_from_days`].
+    /// that year outgrows an `i32`; see [`civil_from_days`].
     pub fn add_days(self, delta: i64) -> Result<Self, CalError> {
         Self::from_epoch_day(self.epoch_day() + delta)
     }
@@ -161,9 +161,9 @@ impl CivilDate {
     /// (2024-01-31 + 1 month → 2024-02-29).
     ///
     /// The month index is a number the user typed, so it is taken in `i64` and
-    /// the year it reaches is named when that year no longer fits an `i32`:
-    /// thirteen `+2147483647 months` reach a year past the representable one,
-    /// and a truncated `as i32` reported a year nobody asked for.
+    /// the year it reaches is named when that year outgrows an `i32`: thirteen
+    /// `+2147483647 months` reach a year past the representable one, and a
+    /// truncated `as i32` would report a year nobody asked for.
     pub fn add_months(self, delta: i32) -> Result<Self, CalError> {
         let total = i64::from(self.year) * 12 + i64::from(self.month - 1) + i64::from(delta);
         let year = total.div_euclid(12);
@@ -179,7 +179,7 @@ impl CivilDate {
     /// This date plus `delta` years, clamping 2/29 to 2/28 in common years.
     ///
     /// The sum is taken in `i64` and the year it reaches is named when that
-    /// year no longer fits an `i32`. `delta` is a number the user typed, and
+    /// year outgrows an `i32`. `delta` is a number the user typed, and
     /// `+2147483600 years` from 2026 lands past the representable one; a
     /// wrapped year would be a year nobody asked for, so it is reported
     /// instead. Whether the year is *servable* is the caller's check — this

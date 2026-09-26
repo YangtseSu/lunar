@@ -16,9 +16,9 @@
 //!
 //! **A mark is an attribute and nothing else.** The cell's text is the calendar
 //! and festival layer alone, unmodified: a 调休 Saturday still reads 九月, a
-//! 放假 day still reads 中秋节. Writing 放假 or 班 into the cell would buy
-//! nothing the colour does not already say, and it would cost the lunar day or
-//! the festival name — the two things a calendar is for.
+//! 放假 day still reads 中秋节. Spelling the statutory entry out in the cell
+//! would buy nothing the colour does not already say, and it would cost the
+//! lunar day or the festival name — the two things a calendar is for.
 //!
 //! The consequence is deliberate: **a redirected or piped grid shows no mark
 //! at all.** `cal --color > october.txt` keeps it, `cal > october.txt` does
@@ -33,8 +33,9 @@ use crate::lang;
 /// SGR for a 放假 day: red text, the conventional colour of a holiday.
 const REST_STYLE: &str = "31";
 
-/// SGR for a 调休 day: bold and bright. The day is only as rare as the `班` that
-/// used to name it, so it is drawn like any other highlighted cell.
+/// SGR for a 调休 day: bold and bright. A 调休 is a working day the State
+/// Council moved onto a weekend, not a rare kind of day, so it takes the same
+/// kind of highlight as any other marked cell.
 const WORK_STYLE: &str = "1;93";
 
 /// SGR for the reference day: inverse video, a solid block the eye finds in a

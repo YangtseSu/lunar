@@ -152,10 +152,9 @@ fn main() -> ExitCode {
     let cli = Cli::parse();
 
     // The token help needs no date and no zone, so it is answered before the
-    // reference day is resolved. It used to be printed from inside the
-    // dispatch, which put it *after* `tz::today()` — so a machine with an
-    // unreadable `TZ` could not read the one page that would explain the
-    // tokens it was otherwise refusing to expand.
+    // reference day is resolved: a machine whose `TZ` cannot be read would
+    // otherwise fail on the one page that explains the tokens it is about to
+    // be asked to expand.
     if let Command::Date { help_format, .. } = &cli.command
         && *help_format
     {

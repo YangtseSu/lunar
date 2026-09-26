@@ -7,21 +7,21 @@
 //! | `%Y`  | 公历年 (signed for years < 1) |
 //! | `%m`  | 公历月, zero padded |
 //! | `%d`  | 公历日, zero padded |
-//! | `%A`  | 星期几 (一..日 / Mon..Sun) |
-//! | `%G`  | 农历年干支 (丙午 / Bing Wu) |
+//! | `%A`  | 星期几 (一..日) |
+//! | `%G`  | 农历年干支 (丙午) |
 //! | `%M`  | 农历月 (正月 / 闰六月 / 腊月) |
 //! | `%N`  | 农历日 (初一) |
 //! | `%n`  | 农历日数字 (23) |
 //! | `%H`  | 干支月 (丙申) |
 //! | `%D`  | 干支日 (辛巳) |
-//! | `%S`  | 生肖 (马 / Horse) |
+//! | `%S`  | 生肖 (马) |
 //! | `%Q`  | 节气, empty when the day has none |
 //! | `%%`  | literal `%` |
 //!
 //! `\` escapes the next character and yields it: `\n` a newline, `\t` a tab,
 //! `\r` a carriage return, and `\%` (like `%%`) a literal `%`. `\\` is a
-//! literal backslash. Every name the engine owns is rendered in the chosen
-//! language.
+//! literal backslash. Every name the engine owns is rendered in the
+//! Simplified Chinese the tool speaks.
 
 use std::fmt::Write as _;
 
@@ -39,10 +39,9 @@ pub fn expand(format: &str, solar: Solar, out: &mut String) {
         match ch {
             // A backslash escapes the next character: it yields that
             // character, and only `n`, `t` and `r` have a second meaning.
-            // `\%` used to fall through to the catch-all and print both
-            // characters, so the one escape a `%` needs — the token is
-            // introduced by `%`, so a literal one cannot be written without
-            // it — did not work. `%%` does the same job and always did.
+            // `\%` is one of those, and is why a literal `%` needs no `%%`:
+            // the token is introduced by `%`, so a format that has to spell
+            // the percent sign out can escape it here as well.
             '\\' => match chars.next() {
                 Some('n') => out.push('\n'),
                 Some('t') => out.push('\t'),

@@ -275,11 +275,4 @@ Execute them one at a time; each is its own commit and its own verification.
 `docs/parity.md` records the `cal(1)` / `date(1)` compatibility matrix the plans
 are judged against.
 
-## Known Defects
 
-All verified; each is a plan, not intended behaviour. Fix deliberately; do not
-silently paper over one as a side effect of unrelated work.
-
-- Stale doc-comments: the removed language layer ("rendered in the chosen
-  language", `Mon..Sun`), `班` in profiles that print `调休上班`
-  (`docs/plans/07`).

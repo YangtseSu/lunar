@@ -3,15 +3,16 @@
 //! Without `-f` it prints the standard five-line day profile:
 //!
 //! ```text
-//! 公历：2026年9月7日 星期一
-//! 农历：丙午年七月廿六
-//! 干支：丙午年 丙申月 甲申日
-//! 生肖：马
-//! 节气：白露
+//! 公历: 2026年9月7日 星期一
+//! 农历: 丙午年七月廿六
+//! 干支: 丙午 丙申 甲申
+//! 生肖: 马
+//! 节气: 白露
 //! ```
 //!
-//! The `节气` line disappears when the day carries no solar term, and the
-//! `放假` / `班` line appears only when the day is on the statutory calendar.
+//! The `节气` line disappears when the day carries no solar term, and a
+//! `法定: 中秋节 放假` / `法定: 中秋节 调休上班` line appears only when the
+//! day is on the statutory calendar.
 //!
 //! The day is a **civil** one by default; `-l` reads the same three positionals
 //! as lunar instead, and `-R` picks the leap month, so `date -l 2020 4 1 -R`
@@ -131,8 +132,8 @@ fn write_profile(solar: Solar, out: &mut String) {
         let _ = writeln!(out, "节气: {term}");
     }
     // The statutory calendar is the one overlay the profile reports even in
-    // its default form: 放假 and 班 change what the day *is*, not what it is
-    // called, and no other line of the profile says either.
+    // its default form: 放假 and 调休上班 change what the day *is* rather than
+    // what it is called, and no other line of the profile says either.
     if let Some(line) = calendar::legal_holiday_line(&solar) {
         let _ = writeln!(out, "{line}");
     }

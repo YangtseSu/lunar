@@ -407,8 +407,8 @@ pub fn legal_holiday(solar: &Solar) -> Option<Holiday> {
 /// One `法定: …` line of the `date` profile, or `None` for an ordinary day.
 ///
 /// The line carries both halves of the statutory entry — the name and
-/// whether the day is off or 调休上班 — because that is the one thing a reader
-/// of a day profile has no other way to learn, and the 调休 half in
+/// whether the day is 放假 or 调休上班 — because that is the one thing a
+/// reader of a day profile has no other way to learn, and the 调休 half in
 /// particular contradicts the weekday the profile prints above it.
 pub fn legal_holiday_line(solar: &Solar) -> Option<String> {
     let holiday = legal_holiday(solar)?;
