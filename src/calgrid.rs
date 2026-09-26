@@ -45,7 +45,7 @@ use crate::calendar::{self, CalError};
 use crate::cell::{self, CellStyle};
 use crate::civil::CivilDate;
 use crate::lang;
-use crate::mark::{self, Color, Mark};
+use crate::mark::{self, Color, Mark, Statutory};
 
 /// Blank columns between two cells, so a cell that exactly fills its column
 /// still reads as separate from its neighbour.
@@ -180,14 +180,16 @@ impl Grid {
                         true => format!("{}/{}", solar.month(), solar.day()),
                         false => solar.day().to_string(),
                     };
-                    let mark = day_mark(&solar, date, today, style);
+                    // The mark paints the cell; it never reaches the content,
+                    // so what a day reads is the calendar alone.
+                    let mark = day_mark(&solar, date, today, style.holiday);
                     let content = match lunar_view {
-                        true => cell::lunar_month_content(&solar, &lunar, style, mark),
-                        false => cell::content(&solar, &lunar, style, mark),
+                        true => cell::lunar_month_content(&solar, &lunar, style),
+                        false => cell::content(&solar, &lunar, style),
                     };
                     (label, content, mark)
                 }
-                false => (String::new(), String::new(), Mark::None),
+                false => (String::new(), String::new(), Mark::default()),
             };
             days.push(Entry {
                 label,
@@ -251,21 +253,23 @@ impl Grid {
 
 /// What a day is marked with.
 ///
-/// The reference day wins every argument, then 法定节假日 放假, then 调休: a
-/// 调休 Saturday is off in every sense but the one the calendar made it.
-/// `style.holiday` gates the statutory marks only, so `--no-holiday` leaves
-/// the reference day highlighted.
-fn day_mark(solar: &Solar, date: CivilDate, today: CivilDate, style: CellStyle) -> Mark {
-    if date == today {
-        return Mark::Today;
-    }
-    if !style.holiday {
-        return Mark::None;
-    }
-    match calendar::legal_holiday(solar) {
-        Some(holiday) if holiday.is_work() => Mark::Work,
-        Some(_) => Mark::Rest,
-        None => Mark::None,
+/// The two marks do not exclude each other: a reference day that is also 放假
+/// is red *and* inverted, and a 调休 today is bold, bright and inverted. So
+/// this builds a [`Mark`] out of both facts rather than choosing between them —
+/// see [`crate::mark`]. `holiday` is `--no-holiday`, and it gates the statutory
+/// half only; the reference day is marked either way.
+fn day_mark(solar: &Solar, date: CivilDate, today: CivilDate, holiday: bool) -> Mark {
+    let statutory = match holiday {
+        false => Statutory::None,
+        true => match calendar::legal_holiday(solar) {
+            Some(entry) if entry.is_work() => Statutory::Work,
+            Some(_) => Statutory::Rest,
+            None => Statutory::None,
+        },
+    };
+    Mark {
+        holiday: statutory,
+        today: date == today,
     }
 }
 

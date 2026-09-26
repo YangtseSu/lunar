@@ -81,11 +81,32 @@ fn non_space(c: char) -> bool {
 }
 
 /// Splits a line into cells on the grid's pitch, in display columns.
+///
+/// SGR runs are transparent to the column count: they wrap a cell rather than
+/// occupying it, and the padding of a painted cell lives *inside* its run, so
+/// counting the escape bytes would drift every following cell.
 fn split_on_pitch(line: &str, pitch: usize) -> Vec<&str> {
     let mut out = Vec::new();
     let mut start = 0;
     let mut columns = 0;
-    for (byte, c) in line.char_indices() {
+    let mut chars = line.char_indices().peekable();
+    while let Some((byte, c)) = chars.next() {
+        if c == '\u{1b}' {
+            // An SGR run occupies no column. It may sit at a cell's start, in
+            // which case the pending cut must move past it, so the escape
+            // opens the new cell rather than closing the previous one.
+            if columns == pitch {
+                out.push(&line[start..byte]);
+                start = byte;
+                columns = 0;
+            }
+            for (_, c) in chars.by_ref() {
+                if c == 'm' {
+                    break;
+                }
+            }
+            continue;
+        }
         if columns == pitch {
             out.push(&line[start..byte]);
             start = byte;
@@ -95,6 +116,33 @@ fn split_on_pitch(line: &str, pitch: usize) -> Vec<&str> {
     }
     out.push(&line[start..]);
     out
+}
+
+/// Removes every SGR sequence, leaving the text the grid would print without
+/// colour.
+fn strip_sgr(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            for c in chars.by_ref() {
+                if c == 'm' {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// A grid's lines joined back, with trailing whitespace removed.
+fn trimmed(grid: &str) -> String {
+    grid.lines()
+        .map(str::trim_end)
+        .collect::<Vec<_>>()
+        .join("\n")
 }
 
 /// Display width of a string, counting CJK as two columns.
@@ -209,76 +257,273 @@ fn run_failing(args: &[&str]) -> String {
         .to_string()
 }
 
-/// The cell of a given day, read out of a grid by its column.
+/// The text a cell of a grid shows, found by its label.
 ///
-/// The grid is a two-band layout, so the day labels and the cell contents are
-/// separate lines and a day is located by finding the label first.
+/// Cells are located on the grid's **pitch**, not by splitting on
+/// whitespace: a painted cell is padded inside its own SGR run, so
+/// `国庆节    ` arrives as one word and the split would count the cell — and
+/// every one after it — wrongly.
 fn cell_of(grid: &str, label: &str) -> String {
     let lines: Vec<&str> = grid.lines().collect();
-    let row = lines
-        .iter()
-        .position(|line| line.split_whitespace().any(|cell| cell == label))
-        .unwrap_or_else(|| panic!("no cell labelled {label} in:\n{grid}"));
-    let column = lines[row]
-        .split_whitespace()
-        .position(|cell| cell == label)
-        .expect("the label is a cell of its own");
-    lines[row + 1]
-        .split_whitespace()
-        .nth(column)
-        .unwrap_or_else(|| panic!("{label} has no content in:\n{grid}"))
+    let pitch = cell_pitch(grid);
+    let row = label_row(&lines, pitch, label);
+    let label_line = 2 + row * 2;
+    let column = column_of(lines[label_line], pitch, label);
+    strip_sgr(split_on_pitch(lines[label_line + 1], pitch)[column])
+        .trim_end()
         .to_string()
 }
 
-/// The statutory calendar, as the grid states it: a 放假 day carries the name
-/// the State Council gave it, and a 调休 workday is labelled 班 — never with
-/// a festival or a solar term, which the weekday would have suggested.
-#[test]
-fn statutory_holidays_and_workdays_are_marked() {
-    let october = run(&["cal", "2026", "10"]);
-    assert_eq!(cell_of(&october, "1"), "放假");
-    assert_eq!(cell_of(&october, "5"), "国庆节");
-    // 2026-10-10 is a Saturday the State Council turned into a workday.
-    assert_eq!(cell_of(&october, "10"), "班");
-
-    let january = run(&["cal", "2026", "1"]);
-    assert_eq!(cell_of(&january, "1"), "放假");
-    assert_eq!(cell_of(&january, "2"), "元旦节");
-    assert_eq!(cell_of(&january, "4"), "班");
-
-    // 2026 春节 runs 2/17..2/23; the day before it is a 调休 workday.
-    let spring = run(&["cal", "-L", "2026", "1"]);
-    assert_eq!(cell_of(&spring, "2/17"), "放假");
-    assert_eq!(cell_of(&spring, "2/28"), "班");
+/// The SGR a cell of a **coloured** grid is painted with, found by its label.
+///
+/// The grid is a two-band layout, so the label and the paint live on different
+/// lines of the same row: the date band and the content band are both painted,
+/// and both are checked.
+fn paint_of<'a>(grid: &'a str, label: &str) -> Option<&'a str> {
+    let lines: Vec<&'a str> = grid.lines().collect();
+    let pitch = cell_pitch(grid);
+    let label_line = 2 + label_row(&lines, pitch, label) * 2;
+    let column = column_of(lines[label_line], pitch, label);
+    for band in [label_line, label_line + 1] {
+        if let Some(style) = sgr_of(split_on_pitch(lines[band], pitch)[column]) {
+            return Some(style);
+        }
+    }
+    None
 }
 
-/// A 放假 day whose name a traditional festival already gives shows 放假
-/// instead, so 中秋节 is not printed twice in the same cell.
+/// Which week of the grid carries `label` in its date band.
+fn label_row(lines: &[&str], pitch: usize, label: &str) -> usize {
+    lines
+        .iter()
+        .skip(2)
+        .step_by(2)
+        .position(|line| {
+            split_on_pitch(line, pitch)
+                .iter()
+                .any(|cell| strip_sgr(cell).trim() == label)
+        })
+        .unwrap_or_else(|| panic!("no cell labelled {label} in:\n{}", lines.join("\n")))
+}
+
+/// Which cell of `line` carries `label`.
+fn column_of(line: &str, pitch: usize, label: &str) -> usize {
+    split_on_pitch(line, pitch)
+        .iter()
+        .position(|cell| strip_sgr(cell).trim() == label)
+        .expect("the label is a cell of its own")
+}
+
+/// The SGR a single cell is painted with, if it is painted.
+fn sgr_of(cell: &str) -> Option<&str> {
+    let after = cell.strip_prefix("\u{1b}[")?;
+    let (style, _) = after.split_once('m')?;
+    Some(&cell[..style.len() + 3])
+}
+
+/// The SGR painting one cell of a coloured grid, found by its label.
+///
+/// The statutory calendar is an attribute and never a label, so a grid can
+/// only show 放假 or 调休 here: 2026-10-10 is a Saturday the State Council
+/// turned into a workday, and 2026-10-01 .. 10-07 are 放假.
 #[test]
-fn a_holiday_named_by_a_festival_shows_rest_once() {
-    let september = run(&["cal", "2026", "9"]);
-    // 9/25 is 中秋节, the first day of the 中秋 holiday; 9/26 and 9/27 keep it.
-    for day in ["25", "26", "27"] {
+fn statutory_days_are_painted_and_nothing_else() {
+    let october = run(&["cal", "2026", "10", "--color"]);
+    for day in ["1", "2", "3", "4", "5", "6", "7"] {
         assert_eq!(
-            cell_of(&september, day),
-            if day == "25" { "放假" } else { "中秋节" },
-            "the 中秋 holiday on 2026-09-{day}:\n{september}"
+            paint_of(&october, day),
+            Some("\u{1b}[31m"),
+            "2026-10-{day} is 放假:\n{october:?}"
         );
     }
-    // 9/20 is a 调休 Sunday.
-    assert_eq!(cell_of(&september, "20"), "班");
+    // 2026-10-10 is a 调休 workday; the 8th and 9th carry neither mark.
+    assert_eq!(paint_of(&october, "10"), Some("\u{1b}[1;93m"));
+    for day in ["8", "9", "11", "12"] {
+        assert_eq!(
+            paint_of(&october, day),
+            None,
+            "2026-10-{day} is an ordinary day:\n{october:?}"
+        );
+    }
+
+    let january = run(&["cal", "2026", "1", "--color"]);
+    for day in ["1", "2", "3"] {
+        assert_eq!(
+            paint_of(&january, day),
+            Some("\u{1b}[31m"),
+            "2026-01-{day} is 放假"
+        );
+    }
+    assert_eq!(paint_of(&january, "4"), Some("\u{1b}[1;93m"));
+
+    // 2026 春节 runs 2/17..2/23, and 2/28 is the 调休 workday before it.
+    let spring = run(&["cal", "-L", "2026", "1", "--color"]);
+    for day in ["2/17", "2/18", "2/19", "2/20", "2/21", "2/22", "2/23"] {
+        assert_eq!(paint_of(&spring, day), Some("\u{1b}[31m"), "{day} is 放假");
+    }
+    assert_eq!(paint_of(&spring, "2/28"), Some("\u{1b}[1;93m"));
 }
 
-/// `--no-holiday` drops the statutory level only; the festivals underneath
-/// stay, and the reference day is unaffected.
+/// The two marks **compose**: a reference day that is also 放假 is red *and*
+/// inverted, and a 调休 today is bold, bright and inverted. Neither wins.
+///
+/// `tz::today()` is not an input the suite can pin, so this cannot assert
+/// "today is red and inverted" outright. It pins the mechanism instead, over
+/// the whole of 2026, and the mechanism is what makes composition testable: a
+/// combined mark is a **single SGR run carrying both parameters**
+/// (`\x1b[31;7m`), never two runs and never one parameter dropped. So every
+/// `\x1b[…m` in a coloured year must list `7` if and only if that run is the
+/// reference day, and a run that lists both `31` and `7` is a 放假 today.
 #[test]
-fn no_holiday_switch_turns_off_only_the_statutory_level() {
-    let plain = run(&["cal", "2026", "10", "--no-holiday"]);
+fn the_statutory_calendar_and_the_reference_day_compose() {
+    let mut year = String::new();
+    for month in 1..=12 {
+        year.push_str(&run(&["cal", "2026", &month.to_string(), "--color"]));
+    }
+
+    let runs = |year: &str| {
+        year.match_indices('\u{1b}')
+            .map(|(at, _)| {
+                let run = &year[at..];
+                run[..run.find('m').expect("an SGR run ends in m") + 1].to_string()
+            })
+            .filter(|run| run != "\u{1b}[0m")
+            .collect::<Vec<_>>()
+    };
+    let painted = runs(&year);
+
     assert!(
-        !plain.contains("放假") && !plain.contains("班"),
-        "the statutory level is off:\n{plain}"
+        painted.iter().any(|run| run == "\u{1b}[31m"),
+        "2026 has 放假 days"
     );
-    assert!(plain.contains("国庆节"), "the festivals remain:\n{plain}");
+    assert!(
+        painted.iter().any(|run| run == "\u{1b}[1;93m"),
+        "2026 has 调休 workdays"
+    );
+
+    // Every inverse-painted run is the reference day, and there is exactly one
+    // grid in the year that can contain it — so at most two runs, one per band.
+    let inverted: Vec<&String> = painted
+        .iter()
+        .filter(|run| run.contains(";7m") || run.ends_with("[7m"))
+        .collect();
+    assert!(
+        inverted.len() <= 2,
+        "at most the reference day is inverted, in two bands: {inverted:?}"
+    );
+
+    // A run that carries both a statutory colour and the inversion is a day
+    // that is both. `--no-holiday` must reduce it to the bare inversion, which
+    // is the observable proof that the two were independent rather than one
+    // having replaced the other.
+    let mut plain = String::new();
+    for month in 1..=12 {
+        plain.push_str(&run(&[
+            "cal",
+            "2026",
+            &month.to_string(),
+            "--color",
+            "--no-holiday",
+        ]));
+    }
+    let plain_painted = runs(&plain);
+    let composed = painted.len() - plain_painted.len();
+    assert_eq!(
+        composed,
+        painted
+            .iter()
+            .filter(|run| run.contains("[31m") || run.contains("[1;93m"))
+            .count(),
+        "the difference is exactly the statutory runs"
+    );
+    // Under `--no-holiday` a reference day that was statutory reads as the bare
+    // inversion, so no combined run survives.
+    assert!(
+        !plain_painted
+            .iter()
+            .any(|run| run.contains("31;") || run.contains("93;")),
+        "--no-holiday leaves no combined run: {plain_painted:?}"
+    );
+
+    // **Both statutory variants reduce the same way.** A 放假 today and a 调休
+    // today are the same event with a different colour: each is a single run
+    // listing its own parameters *plus* the inversion, and each becomes the
+    // bare inversion when the statutory half is switched off. Were 调休 the
+    // odd one out — the case the `match` could plausibly get wrong — it would
+    // either keep its colour under the switch or arrive as two runs instead of
+    // one, and the two reductions below would differ in shape.
+    for (label, statutory_run) in [("放假", "\u{1b}[31m"), ("调休", "\u{1b}[1;93m")] {
+        assert!(
+            painted.iter().any(|run| run == statutory_run),
+            "{label} appears on its own, so it can be compared when combined"
+        );
+    }
+    // Whatever the clock says, the combined forms that exist must be
+    // single-run concatenations of a statutory run and the bare inversion.
+    for run in painted.iter().filter(|run| run.contains('7')) {
+        let combined = run.trim_start_matches("\u{1b}[").trim_end_matches('m');
+        assert_eq!(
+            run.matches('\u{1b}').count(),
+            1,
+            "a combined mark is one run: {run:?}"
+        );
+        let mut parts = combined.split(';');
+        assert_eq!(
+            parts.next_back(),
+            Some("7"),
+            "the inversion is the last parameter: {run:?}"
+        );
+        let rest = parts.collect::<Vec<_>>().join(";");
+        assert!(
+            rest == "31" || rest == "1;93" || rest.is_empty(),
+            "only a statutory colour precedes the inversion: {run:?}"
+        );
+    }
+}
+
+/// A mark never becomes a label: a 放假 day still reads whatever the calendar
+/// says — its festival, or its lunar day — and a 调休 workday likewise.
+#[test]
+fn a_statutory_day_still_reads_the_calendar() {
+    // The 2026 中秋 holiday runs 9/25..9/27. Only the first day carries the
+    // festival name; the other two read their lunar day, and all three are
+    // painted.
+    let september = run(&["cal", "2026", "9"]);
+    assert_eq!(cell_of(&september, "25"), "中秋节");
+    assert_eq!(cell_of(&september, "26"), "十六");
+    assert_eq!(cell_of(&september, "27"), "十七");
+    // 9/20 is a 调休 Sunday; without the mark it reads 初十, not a 班.
+    assert_eq!(cell_of(&september, "20"), "初十");
+
+    // 2026-10-10 is a 调休 workday and the first day of 九月, so the month
+    // name is what the cell must keep.
+    let october = run(&["cal", "2026", "10"]);
+    assert_eq!(cell_of(&october, "10"), "九月");
+    assert_eq!(cell_of(&october, "1"), "国庆节");
+}
+
+/// `--no-holiday` drops the statutory *marking* and changes no text at all.
+#[test]
+fn no_holiday_switch_removes_only_the_painting() {
+    let marked = run(&["cal", "2026", "10", "--color"]);
+    let plain = run(&["cal", "2026", "10", "--color", "--no-holiday"]);
+    assert!(
+        marked.contains("\u{1b}[31m"),
+        "the statutory days are painted without the switch"
+    );
+    assert!(
+        !plain.contains('\u{1b}'),
+        "--no-holiday in a month without the reference day paints nothing:\n{plain:?}"
+    );
+    // A painted cell is padded inside its SGR run, so stripping it leaves
+    // those spaces behind: compare line by line, trimmed.
+    assert_eq!(
+        trimmed(&strip_sgr(&marked)),
+        trimmed(&plain),
+        "the two grids differ only in the statutory painting"
+    );
+    // The festivals are untouched by the switch.
+    assert!(plain.contains("国庆节"));
 }
 
 /// A cell is painted, never decorated with a character, so the text of a grid
@@ -299,25 +544,6 @@ fn colour_adds_escapes_and_nothing_else() {
         stripped, plain,
         "stripping SGR must leave the grid unchanged"
     );
-}
-
-/// Removes every SGR sequence, leaving the text the grid would print without
-/// colour.
-fn strip_sgr(text: &str) -> String {
-    let mut out = String::with_capacity(text.len());
-    let mut chars = text.chars();
-    while let Some(c) = chars.next() {
-        if c != '\u{1b}' {
-            out.push(c);
-            continue;
-        }
-        for c in chars.by_ref() {
-            if c == 'm' {
-                break;
-            }
-        }
-    }
-    out
 }
 
 /// The profile reports the statutory calendar even in its default form: 放假
@@ -515,9 +741,9 @@ fn civil_overlay_grid_matches_documented_output() {
 7               8               9               10              11              12              13
 白露            廿七            廿八            教师节          八月            初二            初三
 14              15              16              17              18              19              20
-初四            初五            初六            初七            初八            全民国防教育日  班
+初四            初五            初六            初七            初八            全民国防教育日  初十
 21              22              23              24              25              26              27
-十一            十二            秋分            十四            放假            中秋节          中秋节
+十一            十二            秋分            十四            中秋节          十六            十七
 28              29              30
 十八            十九            二十"#;
     assert_eq!(run(&["cal", "2026", "9"]), expected);

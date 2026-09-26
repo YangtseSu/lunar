@@ -10,7 +10,8 @@ information. Two subcommands:
 - `lunar cal` — `cal`-style month/year grids overlaid with lunar days, the 24 solar terms,
   traditional festivals and the 法定节假日 (放假 / 调休), over civil months or, with `-L`,
   lunar months. Three kinds of day are **painted** (SGR), never decorated with characters:
-  the reference day, 放假 and 调休.
+  放假, 调休 and the reference day — all attributes, and they **compose**: a day that is
+  both a 放假 and today is red and inverted at once.
 
 All astronomy is delegated to the [`lunar-rs`](https://crates.io/crates/lunar-rs) crate (a
 ShouXing / 寿星天文历 port). **This repo never implements calendar math itself** — it parses
@@ -192,34 +193,51 @@ resolved in `main` and passed beside `today`, not read from a global.
 single source of truth, in this order:
 
 ```text
-法定节假日 > 节日 > 初一显示月份名 > 节气 > 农历日
+节日 > 初一显示月份名 > 节气 > 农历日
 ```
 
 The month-name level is skipped on 正月 (so 春节 keeps its festival label), and
 `--number` only affects the final 农历日 level, never the priority. Do not reorder or
-reimplement this outside `cell.rs`.
+reimplement this outside `cell.rs`. **The statutory calendar is not a level here** — it
+was one, showing 放假 and 班, and it was removed: it cost a 放假 day its festival name
+and a 调休 workday its lunar day, which are the facts the tool exists to print.
 
-**The 法定节假日 level is a table, not a festival.** `calendar::legal_holiday` reads
+**The 法定节假日 is a mark, not a label.** `calendar::legal_holiday` reads
 `holiday_util::get_holiday_by_ymd`, which is the State Council's published calendar:
-`is_work` false is 放假, true is 调休. It sits above the festivals because it answers a
-question no festival can — 2026 春节 is seven days, and 青年节 falls inside the 劳动
-节 holiday. A 放假 day whose name a traditional festival already supplies shows
-`mark::REST_LABEL` (放假) so the cell does not print 中秋节 twice; a 调休 workday shows
-`mark::WORK_LABEL` (班) and outranks every other level, because a working Saturday
-reading 七夕 is a lie. The engine ships only the years it was given (2001–2026 at
-1.0.0-rc1): a grid outside the window shows festivals and no statutory marks. Do not
-derive workdays from the weekday instead — a 调休 Saturday is exactly the day the two
-disagree.
+`is_work` false is 放假, true is 调休. It is a *third source*, kept apart from the
+festival lists because it answers a question no festival can — 2026 春节 is seven days,
+and 青年节 falls inside the 劳动 节 holiday. The engine ships only the years it was given
+(2001–2026 at 1.0.0-rc1): a grid outside the window shows festivals and no statutory
+marks. Do not derive workdays from the weekday instead — a 调休 Saturday is exactly the
+day the two disagree.
 
-**Marks are attributes, never characters.** `mark::paint` is the only place an SGR run
-is written. A cell that carried a character decoration would shift the display-width
-padding, so today / 放假 / 调休 are painted (`31` red, `1;93` bold bright, `7`
-inverse) and the *text* repeats the information — 放假 in the cell, 班 for a workday —
-so a piped or redirected grid loses only the highlighting.
-`Color::Auto` keys off `stdout().is_terminal()`;
-`--color` / `--no-color` override it, and the colour mode is resolved once in `main`
-and passed down, so no module holds global state. The padding goes *inside* the SGR run,
-which is why a colourless and a coloured grid differ in trailing spaces only.
+**A mark is an attribute and nothing else.** `mark::paint` is the only place an SGR run
+is written: `31` red for 放假, `1;93` bold bright for 调休, `7` inverse for the
+reference day. A cell carrying a character decoration would shift the display-width
+padding, and the text carries no statutory word at all.
+
+**The two marks compose; neither wins.** `Mark` is a struct of a `Statutory`
+variant plus a `today` flag, and `Mark::sgr` **joins** the parameters into one
+run — a 放假 reference day is `\x1b[31;7m`, red and inverted at once, and a 调休
+today is `\x1b[1;93;7m`. One attribute cannot say two things but an SGR run can
+carry both, so the choice is never forced. An earlier version returned early and
+let the statutory colour win outright; that was wrong, and
+`the_statutory_calendar_and_the_reference_day_compose` pins the mechanism that
+replaced it: a combined mark is a single run listing both parameters, and
+`--no-holiday` must reduce it to the bare inversion, which is only possible if
+the two were independent.
+
+**The cost of that, stated plainly: a piped or redirected grid shows no mark.** The
+alternative — repeating the information in the cell — was tried and removed; it
+displaced the festival name and the lunar day to do it. `--color` is the way out for a
+consumer that wants the escapes (`less -R`, `grep --color`), and `lunar date` still
+reports the statutory calendar in words, because a line of text is the only surface it
+has. `Color::Auto` keys off `stdout().is_terminal()`; `--color` / `--no-color` override
+it, and the mode is resolved once in `main` and passed down, so no module holds global
+state. The padding goes *inside* the SGR run, which is why a colourless and a coloured
+grid differ in trailing spaces only — and why the suite's `split_on_pitch` must treat an
+SGR run as occupying no column and must cut a cell boundary *before* a run that opens
+the next cell.
 
 **Both calendars' festivals are consulted.** `calendar::traditional_festivals`
 takes *both* a `Solar` and a `Lunar` and chains `Solar::festivals()` (civil:
@@ -343,22 +361,30 @@ lunar grid layouts, `--number` / `--no-month-name` / `--no-festival` / `--no-hol
 `-s` column shifting, `--color` / `--no-color` (SGR present, and stripping it reproduces
 the uncoloured grid), `-R` leap-month gating, the two `date` channels agreeing except in
 the calendar they read (including `-R` through `-d`), the keyword / `@epoch` / weekday /
-relative forms being unaffected by `-l`, a
-time-of-day refused on a lunar date, the `date -l` error paths, bare-year and month-span
-behaviour, the year-range and reform-gap error messages, both calendars' festivals
-(国庆节 as well as 中秋节), the 法定节假日 cells by date (2026-10-01 放假, 2026-10-10 班),
+relative forms being unaffected by `-l`, a time-of-day refused on a lunar date, the
+`date -l` error paths, bare-year and month-span behaviour, the year-range and reform-gap
+error messages, both calendars' festivals (国庆节 as well as 中秋节), the 法定节假日
+**painting** by date (2026-10-01 .. 10-07 red, 2026-10-10 bold bright), that a statutory
+day still reads the calendar, that the statutory calendar and the reference day compose,
 the `法定` line of the profile, and — separately —
 calendar values **by date** (芒种 on 2020-06-05, …).
 
 **The reference day is not a testable input.** `tz::today()` is the only source of it, so
-the suite cannot pin what a grid marks as today and must not try: assert the statutory
-marks and the text instead, and leave the highlight to `--color` (which is
-deterministic) rather than to a pty.
+the suite cannot assert "today is red and inverted" outright and must not try. It pins
+the *mechanism* instead: `the_statutory_calendar_and_the_reference_day_compose` reads
+every SGR run of a whole coloured year, checks that the statutory colours appear, that
+at most one grid's worth of runs is inverted, and that `--no-holiday` reduces any
+combined run to a bare inversion. That last observation is the real assertion: it holds
+only if the two marks were independent, and a version that let one replace the other
+could not produce a combined run to reduce.
 
-**Pinned grids drift with the statutory table.** `civil_overlay_grid_matches_documented_output`
-and the three whole-year expectations embed 放假 / 班 cells, because the grid now shows
-them. That is intentional: a grid of 2026 is not the same grid it was before this
-level existed.
+**Reading a painted cell is not a `split_whitespace` away.** A painted cell is padded
+*inside* its SGR run, so `国庆节    ` arrives as one word and the split drifts onto every
+cell after it. `cell_of` / `paint_of` locate cells on the grid's **pitch** instead, which
+requires `split_on_pitch` to treat an SGR run as occupying no column — and to cut a cell
+boundary *before* a run that opens the next cell, or the escape lands at the end of the
+previous slice. `strip_sgr` alone does not normalise that: the padding stays behind, so
+grid comparisons trim each line.
 
 **Engine wins over samples.** Where the published samples and the astronomy disagree, the
 engine is correct and the sample is stale. The suite says so explicitly at

@@ -1,37 +1,40 @@
 //! Cell decoration: the reference day, the statutory calendar, and colour.
 //!
-//! A `cal` cell is marked for two independent reasons, and they compose:
+//! A `cal` cell carries two independent marks, and **they compose**:
 //!
-//! * the **reference day** — today, or whatever the local zone says — which is
-//!   the cell the reader came for;
-//! * the **statutory calendar** — 法定节假日 放假, and the 调休 workdays the
-//!   State Council moves onto weekends (see [`crate::calendar::legal_holiday`]).
+//! * the **statutory calendar** — 法定节假日 放假 in red, and the 调休 workdays
+//!   the State Council moves onto weekends in bold bright (see
+//!   [`crate::calendar::legal_holiday`]);
+//! * the **reference day** — today, or whatever the local zone says — in
+//!   inverse video, the block the eye finds first.
 //!
-//! A mark is a foreground or background attribute, never a character, so the
-//! grid is as legible piped to a file as it is on a terminal: without colour
-//! the 放假 days still read 放假 and the 调休 days still read [`WORK_LABEL`].
-//! That is why the colour mode is only ever resolved once, by the caller, and
-//! passed down as a plain `bool` — the grid itself holds no global state.
+//! A day can be both. When today is a 放假 day the cell is red *and* inverted,
+//! so neither fact is lost: the two SGR parameters are written in one run
+//! (`\x1b[31;7m`) and the terminal applies both. A 调休 today reads bold, bright
+//! and inverted. `Today` is therefore a flag alongside the statutory variant,
+//! not a rival to it.
+//!
+//! **A mark is an attribute and nothing else.** The cell's text is the calendar
+//! and festival layer alone, unmodified: a 调休 Saturday still reads 九月, a
+//! 放假 day still reads 中秋节. Writing 放假 or 班 into the cell would buy
+//! nothing the colour does not already say, and it would cost the lunar day or
+//! the festival name — the two things a calendar is for.
+//!
+//! The consequence is deliberate: **a redirected or piped grid shows no mark
+//! at all.** `cal --color > october.txt` keeps it, `cal > october.txt` does
+//! not. For a *day*, `lunar date` still reports the statutory calendar in
+//! words, because a line of text is the only surface it has.
 
 use std::fmt::Write as _;
 use std::io::IsTerminal;
 
 use crate::lang;
 
-/// The label a 放假 cell shows when the statutory name is covered by a
-/// traditional festival: a holiday without a name of its own.
-pub const REST_LABEL: &str = "放假";
-
-/// The label a 调休 cell shows. A weekend made a workday has no festival and
-/// no solar term, so [`crate::cell::content`] keeps it whatever else the day
-/// carries.
-pub const WORK_LABEL: &str = "班";
-
 /// SGR for a 放假 day: red text, the conventional colour of a holiday.
 const REST_STYLE: &str = "31";
 
-/// SGR for a 调休 day: bold and bright. The `班` label is only as rare as the
-/// day itself, so it is drawn like any other highlighted cell.
+/// SGR for a 调休 day: bold and bright. The day is only as rare as the `班` that
+/// used to name it, so it is drawn like any other highlighted cell.
 const WORK_STYLE: &str = "1;93";
 
 /// SGR for the reference day: inverse video, a solid block the eye finds in a
@@ -64,62 +67,65 @@ impl Color {
     }
 }
 
-/// What a cell is marked with.
+/// What a cell is marked with: a statutory variant, plus the reference day.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
-pub enum Mark {
-    /// An ordinary day, drawn in the terminal's own colours.
+pub struct Mark {
+    /// The statutory calendar, when the day has an entry.
+    pub holiday: Statutory,
+    /// Whether this is the reference day.
+    pub today: bool,
+}
+
+/// The statutory calendar's own answer for a day.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum Statutory {
+    /// An ordinary day: neither 放假 nor 调休.
     #[default]
     None,
     /// 法定节假日: a day off.
     Rest,
     /// 调休: a weekend the State Council turned into a workday.
     Work,
-    /// The reference day.
-    Today,
 }
 
 impl Mark {
-    /// Whether the cell is painted rather than left plain.
-    pub const fn is_tint(self) -> bool {
-        !matches!(self, Self::None)
-    }
-
-    /// The SGR painting this mark.
-    const fn sgr(self) -> &'static str {
-        match self {
-            Self::None => "",
-            Self::Rest => REST_STYLE,
-            Self::Work => WORK_STYLE,
-            Self::Today => TODAY_STYLE,
+    /// The SGR painting this mark, or `None` to leave the cell plain.
+    ///
+    /// The parameters are **joined, not chosen between**: a 放假 reference day
+    /// is `\x1b[31;7m` — red and inverted at once. Nothing here is a text
+    /// counterpart.
+    pub fn sgr(self) -> Option<String> {
+        let mut parameters = String::new();
+        match self.holiday {
+            Statutory::None => {}
+            Statutory::Rest => parameters.push_str(REST_STYLE),
+            Statutory::Work => parameters.push_str(WORK_STYLE),
         }
-    }
-}
-
-/// The SGR painting a cell, or `None` to leave it plain.
-///
-/// A cell showing [`WORK_LABEL`] paints even when its mark lost its argument
-/// to a holiday on the same day — a 调休 Sunday that is also 春节 — because
-/// `班` only reads as 调休 with the attribute behind it.
-fn sgr_for(mark: Mark, text: &str) -> Option<&'static str> {
-    match mark {
-        Mark::None if text == WORK_LABEL => Some(WORK_STYLE),
-        Mark::None => None,
-        mark => Some(mark.sgr()),
+        if self.today {
+            if !parameters.is_empty() {
+                parameters.push(';');
+            }
+            parameters.push_str(TODAY_STYLE);
+        }
+        match parameters.is_empty() {
+            true => None,
+            false => Some(format!("\x1b[{parameters}m")),
+        }
     }
 }
 
 /// Appends one cell to `out`: `text` padded to `column` display columns,
-/// painted when `color` is set and the mark says so.
+/// painted when `color` is set and the cell is marked.
 ///
 /// The padding is inside the SGR run on purpose, so an inverse-video cell
 /// fills its whole column instead of a single glyph.
 pub fn paint(out: &mut String, mark: Mark, text: &str, column: usize, color: bool) {
-    match sgr_for(mark, text) {
-        Some(style) if color => {
-            let _ = write!(out, "\x1b[{style}m");
+    match color.then(|| mark.sgr()).flatten() {
+        Some(style) => {
+            let _ = write!(out, "{style}");
             out.push_str(&lang::pad_right(text, column));
             out.push_str(RESET);
         }
-        _ => out.push_str(&lang::pad_right(text, column)),
+        None => out.push_str(&lang::pad_right(text, column)),
     }
 }

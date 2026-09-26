@@ -182,9 +182,9 @@ same table.
 ## `lunar cal`
 
 Without arguments it prints the current civil month, with the lunar day, solar
-term or festival under each date. The example below was captured on 2026-09-26,
-which is why that cell reads 放假 — the day is on the statutory calendar — and
-why nothing is coloured: stdout was a pipe.
+term or festival under each date. The grid's text is the calendar alone — the
+statutory calendar below is a *colour*, and this example went to a pipe, so
+nothing is marked:
 
 ```console
 $ lunar cal 2026 9
@@ -195,50 +195,70 @@ $ lunar cal 2026 9
 7               8               9               10              11              12              13
 白露            廿七            廿八            教师节          八月            初二            初三
 14              15              16              17              18              19              20
-初四            初五            初六            初七            初八            全民国防教育日  班
+初四            初五            初六            初七            初八            全民国防教育日  初十
 21              22              23              24              25              26              27
-十一            十二            秋分            十四            放假            中秋节          中秋节
+十一            十二            秋分            十四            中秋节          十六            十七
 28              29              30
 十八            十九            二十
 ```
 
-Cell content follows a fixed priority —
-**法定节假日 > 节日 > 初一显示月份名 > 节气 > 农历日** — so 11 September shows
-八月 instead of 初一, 7 September is covered by 白露 and 25 September by 中秋节.
-Both calendars' festivals count: 1 October shows 国庆节, and a day carrying
-several shows the one a reader recognises, so 十月十日 is 地藏节 rather than the
-more obscure 天灸日.
+Cell content follows a fixed priority — **节日 > 初一显示月份名 > 节气 > 农历日** —
+so 11 September shows 八月 instead of 初一, 7 September is covered by 白露 and
+25 September by 中秋节. Both calendars' festivals count: 1 October shows 国庆节,
+and a day carrying several shows the one a reader recognises, so 十月十日 is
+地藏节 rather than the more obscure 天灸日.
 
 ### The statutory calendar, and the reference day
 
-`lunar cal` shows China's 法定节假日, which is a published table and not a
-festival: a 放假 day shows the name the State Council gave it, and a 调休
-workday — a weekend the State Council moved onto a working day — shows `班`:
+`lunar cal` also marks China's 法定节假日, which is a published table and not a
+festival. Every mark is an attribute, never a character:
+
+| mark | shown as |
+|---|---|
+| 法定节假日 放假 | red |
+| 调休 上班 — a weekend the State Council made a workday | bold bright yellow |
+| the reference day — today, or the local date the run resolved | inverse video |
+
+**The marks compose, and neither wins.** A day can be both at once: when today
+is a 放假 day the cell is red *and* inverted (`ESC[31;7m`), and a 调休 today is
+bold, bright and inverted. One attribute cannot say two things, but a single SGR
+run can carry both parameters, so nothing has to be given up. Run `lunar cal` on
+a day inside a holiday and today is still the block the eye finds first, in the
+colour the day itself carries.
+
+The mark is never written into the cell. A 放假 day still reads 中秋节 and a 调休
+workday still reads 九月, because those are the facts the calendar exists to
+show and an administrative label in their place would displace them:
 
 ```console
 $ lunar cal 2026 10
 2026年10月
 一          二          三          四          五          六          日
                                     1           2           3           4
-                                    放假        国庆节      国庆节      国庆节
+                                    国庆节      廿二        廿三        廿四
 5           6           7           8           9           10          11
-国庆节      国庆节      国庆节      寒露        廿九        班          初二
+世界住房日  廿六        廿七        寒露        廿九        九月        初二
 ```
 
-Three kinds of day are marked, and all three are **attributes, never
-characters**, so the grid is as legible in a file as on a terminal:
-
-| mark | shown as |
-|---|---|
-| 法定节假日 放假 | red |
-| 调休 上班 | bold bright yellow |
-| the reference day — today, or the local date the run resolved | inverse video |
+Read that in a terminal and 1–7 October are red, and 10 October — a Saturday the
+State Council made a workday — is bold bright yellow.
 
 Colour is emitted only when stdout is a terminal; `--color` forces it on (for
-`less -R` and `grep --color`), `--no-color` forces it off, and `--no-holiday`
-drops the statutory level entirely while leaving the reference day marked.
-Because the text carries the same information, a piped or redirected grid loses
-the highlighting and nothing else — the 放假 and 班 cells still read as such.
+`less -R` and `grep --color`) and `--no-color` forces it off.
+`--no-holiday` drops the statutory half of the mark, and a reference day that
+is itself statutory keeps only its own: a 放假 today becomes plain inverse video.
+**A piped or redirected grid shows no mark at all** — that is the
+trade this design makes, and `--color` is the way out of it. For a single day,
+`lunar date` reports the statutory calendar in words:
+
+```console
+$ lunar date -d 2026-10-10
+公历: 2026年10月10日 星期六
+农历: 丙午年九月廿一
+干支: 丙午 戊戌 壬寅
+生肖: 马
+法定: 国庆节 调休上班
+```
 
 `-L` switches to lunar months, where each cell leads with the civil date:
 
