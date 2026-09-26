@@ -269,10 +269,12 @@ above are local, and nothing is "done" until they pass.
 
 ## Implementation Plans
 
-[`docs/plans`](docs/plans) is the work queue for the divergences listed below:
-one file per defect, with reproduction, target behaviour, steps and acceptance.
-Execute them one at a time; each is its own commit and its own verification.
-`docs/parity.md` records the `cal(1)` / `date(1)` compatibility matrix the plans
-are judged against.
+[`docs/plans`](docs/plans) holds one file per defect, with reproduction,
+target behaviour, steps and acceptance. Every plan in it has been executed:
+the queue is empty, and a new divergence starts as a new file. Execute them
+one at a time; each is its own commit and its own verification.
+`docs/parity.md` records the `cal(1)` / `date(1)` compatibility matrix, and
+`docs/README.md` tracks which plans are done — a divergence goes there before
+it is judged.
 
 
