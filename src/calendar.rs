@@ -55,6 +55,9 @@ pub enum CalError {
     /// A lunar month number outside `1..=12`, the leap form included
     /// (`-4` is the leap fourth month), or zero.
     LunarMonthOutOfRange { month: i32 },
+    /// A relative offset shorter than a day, which cannot move a date-only
+    /// answer. Carries the unit as written, e.g. `minutes`.
+    SubDayUnit { unit: String },
 }
 
 impl CalError {
@@ -89,6 +92,9 @@ impl CalError {
             }
             Self::LunarMonthOutOfRange { month } => {
                 format!("农历月份 {month} 非法 (应为 1–12，闰月为负数)")
+            }
+            Self::SubDayUnit { unit } => {
+                format!("日期偏移单位 {unit} 不足一天，本工具只输出日期")
             }
             Self::UnparsableDate { input } => format!("无法解析的日期: {input}"),
             Self::TodayOutOfRange => "当前日期超出支持范围 (1–9999 年)".to_string(),

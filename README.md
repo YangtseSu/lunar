@@ -139,10 +139,14 @@ lunar: 农历 2026 年七月没有第 31 天 (该月只有 29 天)
 ```
 
 `-d` understands `now` / `today` / `tomorrow` / `yesterday`, epoch seconds
-(`@…`), ISO 8601 dates and times (with `Z` or `±hh:mm` zones), `YYYY/MM/DD`,
-`MM/DD/YYYY`, relative offsets (`+3 days`, `-2 weeks`, `90 minutes ago`,
-`1 fortnight`, `next month`) and weekday names (`monday`, `next friday`,
-`last sun`).
+(`@…`), ISO 8601 dates and times (with `Z` or `±hh:mm` zones, the sign
+convention of POSIX: `+0800` is 8 hours *behind* UTC), `YYYY/MM/DD`,
+`MM/DD/YYYY`, relative offsets (`+3 days`, `-2 weeks`, `1 fortnight`,
+`next month`) and weekday names (`monday`, `next friday`, `last sun`).
+
+Offsets shorter than a day are refused rather than ignored: this tool
+answers with a date and has no clock, so `90 minutes ago` would have
+nothing to move.
 
 ### Custom format
 

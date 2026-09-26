@@ -493,8 +493,11 @@ of unrelated work — surface them, or fix them deliberately with a test.
   15:30 and not the hour 1530 — had nowhere to go; and an empty clock was an error rather
   than midnight. A zone with no clock now means midnight in that zone, as `date(1)` does.
   A fourth colon-separated field is now rejected too, which it previously ignored.
-- Sub-day relative units (`90 minutes ago`, `2 hours`) are accepted but are **no-ops**
-  (`src/datestr.rs:435-436`).
+- ~~**Sub-day relative units are accepted but are no-ops.**~~ **Fixed.** `apply_unit`
+  returned the date unchanged, so `90 minutes ago` answered with today and read as though the
+  offset had been applied. A new `CalError::SubDayUnit` refuses them and names the unit. The
+  tool keeps a date and no clock, so there is nothing for a sub-day offset to move — a
+  silent no-op was the one answer that could not be defended.
 - `src/format.rs:20-21` no longer claims `\%` yields a literal `%`; the code emits `\%`
   (two chars). Use `%%`. `\r` works but is still undocumented.
 - ~~The same bad date yields different messages depending on the input channel.~~ **Fixed.**

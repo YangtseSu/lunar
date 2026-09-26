@@ -476,6 +476,13 @@ fn parse_relative(lower: &str, reference: CivilDate, input: &str) -> Result<Civi
 }
 
 /// Applies one relative unit.
+///
+/// Sub-day units are **rejected**, not ignored. They used to return the date
+/// unchanged, so `90 minutes ago` answered with today and read as though the
+/// offset had been applied. This tool has no time of day — a day is the whole
+/// of what it stores — so an offset shorter than a day has nothing to move,
+/// and saying so is the only honest answer. `date(1)` accepts them because it
+/// keeps a clock; this does not.
 fn apply_unit(date: CivilDate, unit: &str, count: i32, input: &str) -> Result<CivilDate, CalError> {
     let unit = unit.trim_end_matches(['.', ',']);
     match unit {
@@ -485,7 +492,9 @@ fn apply_unit(date: CivilDate, unit: &str, count: i32, input: &str) -> Result<Ci
         "month" | "months" => Ok(date.add_months(count)),
         "year" | "years" => Ok(date.add_years(count)),
         "sec" | "secs" | "second" | "seconds" | "min" | "mins" | "minute" | "minutes" | "hour"
-        | "hours" => Ok(date),
+        | "hours" => Err(CalError::SubDayUnit {
+            unit: unit.to_string(),
+        }),
         _ => Err(invalid(input)),
     }
 }

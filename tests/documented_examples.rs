@@ -764,6 +764,36 @@ fn a_bare_next_or_last_moves_that_period() {
     assert!(run_failing(&["date", "-d", "last"]).contains("无法解析"));
 }
 
+/// A sub-day offset is refused, not silently dropped.
+///
+/// `apply_unit` returned the date unchanged for seconds through hours, so
+/// `90 minutes ago` answered with today and read as though the offset had
+/// been applied. The tool keeps a date and no clock, so an offset shorter
+/// than a day has nothing to move — saying so beats pretending.
+#[test]
+fn a_sub_day_offset_is_refused_rather_than_ignored() {
+    for form in [
+        "90 minutes ago",
+        "2 hours",
+        "30 seconds",
+        "1 minute",
+        "3 hours ago",
+    ] {
+        assert!(
+            run_failing(&["date", "-d", form]).contains("不足一天"),
+            "`-d {form}` says it cannot move a date"
+        );
+    }
+    // The whole-day units still work, and the grammar is unaffected by -l.
+    for form in ["1 day", "2 days ago", "1 fortnight", "next month"] {
+        assert_eq!(
+            run(&["date", "-d", form]),
+            run(&["date", "-l", "-d", form]),
+            "`-d {form}` still resolves"
+        );
+    }
+}
+
 /// A time of day is part of the 公历 grammar. Under `-l` it is refused rather
 /// than dropped, so a lunar date never looks like it honoured a time it threw
 /// away.
