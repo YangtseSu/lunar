@@ -516,7 +516,13 @@ of unrelated work — surface them, or fix them deliberately with a test.
   carries the offending text, or an empty string when the *count* is what is wrong, so
   `无法解析的位置参数: abc` and `位置参数过多` are now distinguishable from each other and
   from a real out-of-range month. `date` already had its own error and keeps it.
-- `-3` / `-n N` are silently ignored under `-L` whenever a positional is present.
+- ~~**`-3` / `-n N` are silently ignored under `-L` whenever a positional is present.**~~
+  **Fixed.** `select_lunar_months` returned the named month as soon as it saw two
+  positionals, so the span flags were never read: `cal -L 2026 7 -3` printed one month where
+  `cal 2026 7 -3` printed three. The named month is now the centre of the span, clipped to
+  the year at either end — a span longer than the year yields the year, leap month included.
+  A *bare* lunar year is still the whole year whatever the flags say, since the year is what
+  was asked for there and the flags have nothing to widen.
 - ~~**`src/main.rs` parses `-m/--monday` and discards it.**~~ **Fixed.** It reached the
   dispatch as `let _ = monday;` and did nothing, and because Monday *is* the default the
   output was already right — which is why nothing noticed. It now names the first column in

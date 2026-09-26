@@ -202,14 +202,28 @@ fn select_lunar_months(
         // rejects `i32::MIN`, whose `abs()` would overflow below.
         calendar::check_lunar_month(month)?;
         let wanted = if args.leap { -month.abs() } else { month };
-        return match calendar::lunar_year_month(year, wanted) {
-            Some(found) => Ok(vec![found]),
-            None if args.leap => Err(CalError::NoLeapMonth { year: year_number }),
-            None => Err(CalError::NoSuchLunarMonth {
-                year: year_number,
-                month,
-            }),
+        let Some(anchor) = calendar::lunar_year_month(year, wanted) else {
+            return match args.leap {
+                true => Err(CalError::NoLeapMonth { year: year_number }),
+                false => Err(CalError::NoSuchLunarMonth {
+                    year: year_number,
+                    month,
+                }),
+            };
         };
+        // `-3` / `-n N` widen the request the way they do in the civil view:
+        // the named month plus its neighbours, centred on it. A span of one is
+        // the named month alone, which is what an explicit `年 月` always was.
+        let span = month_count(args) as usize;
+        if span <= 1 {
+            return Ok(vec![anchor]);
+        }
+        let start = all
+            .iter()
+            .position(|candidate| candidate.month() == anchor.month())
+            .unwrap_or(0)
+            .saturating_sub(span / 2);
+        return Ok(all.into_iter().skip(start).take(span).collect());
     }
 
     // A whole-year request, or an explicit span, walks every month.

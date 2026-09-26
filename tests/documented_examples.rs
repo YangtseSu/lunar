@@ -1347,6 +1347,53 @@ fn month_spans_are_supported() {
     assert_eq!(titles, vec!["2026年9月", "2026年10月", "2026年11月"]);
 }
 
+/// `-3` / `-n N` widen a `-L` request as they do a civil one.
+///
+/// `select_lunar_months` returned the named month as soon as it saw two
+/// positionals, so the span flags were never read: `cal -L 2026 7 -3` printed
+/// one month where `cal 2026 7 -3` printed three. The named month is now the
+/// centre of the span, clipped to the year at either end.
+#[test]
+fn a_lunar_month_span_centres_on_the_named_month() {
+    fn titles(output: &str) -> Vec<&str> {
+        output
+            .lines()
+            .filter(|line| line.starts_with("农历"))
+            .collect()
+    }
+    // Centred: the named month with one either side.
+    assert_eq!(
+        titles(&run(&["cal", "-L", "2026", "7", "-3"])),
+        vec!["农历 丙午年 六月", "农历 丙午年 七月", "农历 丙午年 八月"]
+    );
+    // The flag that named one month still names one month.
+    assert_eq!(
+        titles(&run(&["cal", "-L", "2026", "7"])),
+        vec!["农历 丙午年 七月"]
+    );
+    // `-n N` reads the same way.
+    assert_eq!(
+        titles(&run(&["cal", "-L", "2026", "7", "-n", "5"])).len(),
+        5
+    );
+    // A span at either end of the year is clipped, not wrapped.
+    assert_eq!(
+        titles(&run(&["cal", "-L", "2026", "1", "-3"])),
+        vec!["农历 丙午年 正月", "农历 丙午年 二月", "农历 丙午年 三月"]
+    );
+    assert_eq!(titles(&run(&["cal", "-L", "2026", "12", "-3"])).len(), 2);
+    // A span longer than the year yields the year, leap month included.
+    assert_eq!(
+        titles(&run(&["cal", "-L", "2020", "7", "-n", "20"])).len(),
+        13
+    );
+    // `-R` centres on the leap month when one exists.
+    assert!(run(&["cal", "-L", "2020", "4", "-R", "-3"]).contains("闰四月"));
+    // A bare lunar year is still the whole year, whatever the span flags say.
+    assert_eq!(titles(&run(&["cal", "-L", "2026"])).len(), 12);
+    assert_eq!(titles(&run(&["cal", "-L", "2026", "-3"])).len(), 12);
+}
+
 #[test]
 fn small_years_parse() {
     assert_eq!(
