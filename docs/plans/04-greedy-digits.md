@@ -1,6 +1,6 @@
 # 计划 04 — 紧凑 `YYYYMMDD` 分支吞噬长数字串
 
-Status: 待实施 · Priority: P1 · Depends: 01（越界要报错而不是回绕）
+Status: 已实施 · Priority: P1 · Depends: 01（越界要报错而不是回绕）
 
 ## 现象
 

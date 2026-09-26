@@ -195,7 +195,7 @@ fn civil_months(year: i32, month: i32, span: Span) -> Result<Vec<CivilDate>, Cal
     let anchor = CivilDate::new(year, month, 1);
     let mut months = Vec::new();
     for step in 0..count {
-        let first_of_month = anchor.add_months(first + step);
+        let first_of_month = anchor.add_months(first + step)?;
         calendar::check_year(first_of_month.year)?;
         months.push(first_of_month);
     }

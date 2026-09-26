@@ -27,6 +27,12 @@
 //! weekday and a relative offset are all statements about *days*, not about a
 //! date written in one calendar or the other, so they resolve against the
 //! reference exactly as they do without `-l`.
+//!
+//! The fixed-width shapes are claimed on a **word boundary**, not on a digit
+//! count: the compact `YYYYMMDD` form needs its eight digits to end the token,
+//! so a bare timestamp (`1758240000`) and a relative offset (`2147483647 days`)
+//! fall through to the branches that can answer them rather than being read as
+//! a year / month / day the user never wrote.
 
 use crate::calendar::{self, CalError, MAX_YEAR, MIN_YEAR};
 use crate::civil::{self, CivilDate};
@@ -78,6 +84,31 @@ fn digits(text: &str, at: usize, until: usize) -> Option<&str> {
         true => Some(field),
         false => None,
     }
+}
+
+/// What follows a compact `YYYYMMDD` date, or `None` when the run of digits
+/// is not a compact date at all.
+///
+/// `text` is the lower-cased input, so the `T` / `t` distinction is gone and
+/// only the word boundary matters. `lower.get(8..)` is `None` when offset 8
+/// splits a character, which is how a multi-byte character in the date field
+/// falls through to the branch that reports it.
+fn compact_suffix(lower: &str) -> Option<&str> {
+    let rest = lower.get(8..)?;
+    match rest.is_empty() || rest.starts_with(['t', ' ']) || is_bare_zone(rest) {
+        true => Some(rest),
+        false => None,
+    }
+}
+
+/// Whether a suffix is a zone designator with no time part, as in
+/// `20260907Z`, `20260907UTC` and `20260907 GMT`.
+///
+/// These are the word-boundary shapes the grammar reads, and they only hold
+/// when nothing is attached in front of the marker — `202609071Z` is a nine
+/// digit run, not a date with a zone.
+fn is_bare_zone(rest: &str) -> bool {
+    matches!(rest.trim(), "z" | "utc" | "gmt")
 }
 
 /// Which calendar the absolute shapes of a `-d` string are written in.
@@ -142,7 +173,7 @@ fn parse_keyword(lower: &str, reference: CivilDate) -> Result<Option<CivilDate>,
         "yesterday" => -1,
         _ => return Ok(None),
     };
-    Ok(Some(reference.add_days(delta)))
+    Ok(Some(reference.add_days(delta)?))
 }
 
 /// `@seconds[.fraction]`, read as the day `date(1)` reads it.
@@ -158,7 +189,7 @@ fn parse_keyword(lower: &str, reference: CivilDate) -> Result<Option<CivilDate>,
 fn parse_epoch(rest: &str, input: &str) -> Result<CivilDate, CalError> {
     let whole = rest.split('.').next().unwrap_or(rest);
     let seconds: i64 = whole.parse().map_err(|_| invalid(input))?;
-    let date = CivilDate::from_epoch_day(seconds / civil::SECS_PER_DAY);
+    let date = CivilDate::from_epoch_day(seconds / civil::SECS_PER_DAY)?;
     validate(date, input)
 }
 
@@ -186,15 +217,27 @@ fn parse_absolute(
 
     let input = text;
     // YYYYMMDD, optionally followed by a time part: 20260907T1530
-    if let (Some(year), Some(month), Some(day)) =
-        (digits(text, 0, 4), digits(text, 4, 6), digits(text, 6, 8))
-    {
+    //
+    // The eight leading digits are a compact date only when a **word boundary**
+    // follows them. The check was absent, so the branch claimed any input
+    // beginning with eight digits: `1758240000` was read as 1758-24-00 and
+    // `2147483647 days` as 2147-48-36, each reporting a month the user never
+    // wrote. What may follow is a `T` / `t` / space before a time part, or a
+    // zone designator standing on its own (`20260907Z`) — the shapes
+    // `finish` and `split_zone` actually read. Anything else leaves the
+    // compact form alone and falls through to the branches below, where the
+    // grammar gives the input a truer answer or a rejection.
+    if let (Some(year), Some(month), Some(day), Some(rest)) = (
+        digits(text, 0, 4),
+        digits(text, 4, 6),
+        digits(text, 6, 8),
+        compact_suffix(lower),
+    ) {
         let parts = Parts {
             year: number(year, input)?,
             month: number(month, input)?,
             day: number(day, input)?,
         };
-        let rest = lower.get(8..).unwrap_or_default();
         return finish(parts, rest, calendar, input).map(Some);
     }
 
@@ -348,7 +391,7 @@ fn shift_by_zone(
         date.epoch_day() * civil::SECS_PER_DAY + i64::from(hour) * 3600 + i64::from(minute) * 60
             - offset;
     validate(
-        CivilDate::from_epoch_day(seconds.div_euclid(civil::SECS_PER_DAY)),
+        CivilDate::from_epoch_day(seconds.div_euclid(civil::SECS_PER_DAY))?,
         input,
     )
 }
@@ -461,7 +504,7 @@ fn parse_weekday(lower: &str, reference: CivilDate) -> Result<Option<CivilDate>,
         0 if delta < 0 => delta += 7,
         _ => {}
     }
-    Ok(Some(reference.add_days(i64::from(delta))))
+    Ok(Some(reference.add_days(i64::from(delta))?))
 }
 
 /// `+3 days`, `-2 weeks`, `2 days ago`, `1 fortnight`, `90 minutes`, `next month`.
@@ -538,10 +581,10 @@ fn parse_relative(lower: &str, reference: CivilDate, input: &str) -> Result<Civi
 fn apply_unit(date: CivilDate, unit: &str, count: i32, input: &str) -> Result<CivilDate, CalError> {
     let unit = unit.trim_end_matches(['.', ',']);
     match unit {
-        "fortnight" | "fortnights" => Ok(date.add_days(i64::from(count) * 14)),
-        "day" | "days" => Ok(date.add_days(i64::from(count))),
-        "week" | "weeks" => Ok(date.add_days(i64::from(count) * 7)),
-        "month" | "months" => Ok(date.add_months(count)),
+        "fortnight" | "fortnights" => date.add_days(i64::from(count) * 14),
+        "day" | "days" => date.add_days(i64::from(count)),
+        "week" | "weeks" => date.add_days(i64::from(count) * 7),
+        "month" | "months" => date.add_months(count),
         "year" | "years" => date.add_years(count),
         "sec" | "secs" | "second" | "seconds" | "min" | "mins" | "minute" | "minutes" | "hour"
         | "hours" => Err(CalError::SubDayUnit {

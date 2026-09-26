@@ -321,8 +321,6 @@ not features, and are tracked as implementation plans in [`docs/plans`](docs/pla
   the module docs advertise), and no bare time with a zone (`15:30 UTC`); a bare
   time is also silently accepted under `-l` where the rule says refuse
   (`docs/plans/06`);
-- a long run of digits is claimed by the compact `YYYYMMDD` form
-  (`date -d "2147483647 days"` reports a month, `docs/plans/04`);
 
 ## Implementation notes
 

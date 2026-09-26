@@ -273,9 +273,6 @@ are judged against.
 All verified; each is a plan, not intended behaviour. Fix deliberately; do not
 silently paper over one as a side effect of unrelated work.
 
-- Long digit runs are claimed by the compact `YYYYMMDD` form, so
-  `date -d "2147483647 days"` reports a month instead of an offset
-  (`docs/plans/04`).
 - `cal -L 9999` cannot render the last lunar year: its 腊月 crosses into 10000
   and the whole run fails with a range error (`docs/plans/05`).
 - `-d` advertises fractional seconds but rejects them; unpadded ISO and a bare

@@ -995,6 +995,105 @@ fn a_huge_relative_offset_is_reported_not_wrapped() {
     );
 }
 
+/// A long run of digits is not a compact `YYYYMMDD` date.
+///
+/// The compact branch read its eight fields and stopped looking, so it claimed
+/// *any* input beginning with eight digits: `1758240000` became 1758-24-00 and
+/// `2147483647 days` became 2147-48-36, each reporting a month the user never
+/// wrote. `date(1)` rejects both. The compact form is now claimed only at a
+/// word boundary, so an input that is not one falls through to the branches
+/// that can answer it — a bare timestamp has no reading and is reported, while
+/// `2147483647 days` is a well-formed relative offset whose *result* is out of
+/// range, and is reported as such.
+#[test]
+fn a_long_digit_run_is_not_a_compact_date() {
+    // A timestamp missing its `@` is not a date; `date(1)` says `invalid date`
+    // and so does this, with the offending text.
+    assert_eq!(
+        run_failing(&["date", "-d", "1758240000"]).trim_end(),
+        "lunar: 无法解析的日期: 1758240000"
+    );
+    // A well-formed offset stays a relative expression, and what it runs into
+    // is reported as a *year*: `2147483647` days is about 5.88 million years,
+    // so the year it reaches is near 5 881 6xx whatever the reference day is,
+    // and a truncated `i32` would name a negative year instead.
+    let stderr = run_failing(&["date", "-d", "2147483647 days"]);
+    let named: i64 = stderr
+        .split("年份 ")
+        .nth(1)
+        .and_then(|rest| rest.split(' ').next())
+        .and_then(|digits| digits.parse().ok())
+        .unwrap_or_else(|| panic!("`{stderr}` names the year it reached"));
+    let reference: i64 = run(&["date", "-d", "today", "-f", "%Y"])
+        .parse()
+        .expect("a four-digit year");
+    assert!(
+        (5_881_600..5_881_800).contains(&named),
+        "2147483647 days reaches a year near 5 881 6xx, got {named} (reference {reference})"
+    );
+    // The dates that *are* compact keep working, with and without a time part.
+    for form in [
+        "20260907",
+        "20260907T1530",
+        "20260907t1530",
+        "20260907 15:30",
+    ] {
+        assert_eq!(
+            run(&["date", "-d", form, "-f", "%Y-%m-%d"]),
+            "2026-09-07",
+            "`-d {form}` is still 2026-09-07"
+        );
+    }
+}
+
+/// A month or a day count names the year it reached, like a year count does.
+///
+/// `add_years` took its sum in `i64` and named the year, while `add_months`
+/// truncated an `i64` month index with `as i32` and `add_days` let the epoch
+/// arithmetic truncate the same way. Both were reachable from user input —
+/// twelve `+2147483647 months`, twenty-seven `+2147483647 fortnights` — and
+/// both answered with a year nobody had asked for, which is the defect the year
+/// count had been fixed for. The parser applies one unit at a time, so the year
+/// named is the one the *first* step past the representable range reaches.
+#[test]
+fn a_wrapped_month_or_day_count_names_the_year_it_reached() {
+    let named_year = |args: &[&str]| -> i64 {
+        let stderr = run_failing(args);
+        stderr
+            .split("年份 ")
+            .nth(1)
+            .and_then(|rest| rest.split(' ').next())
+            .and_then(|digits| digits.parse().ok())
+            .unwrap_or_else(|| panic!("`lunar date {args:?}` names a year, got `{stderr}`"))
+    };
+    // The month index runs twelve per year, so the twelfth maximum count is
+    // the first to carry the year past what an `i32` holds — and it lands
+    // barely past it, where a truncation would have named a negative year.
+    let month_arg = "+2147483647 months ".repeat(12);
+    let months = vec!["date", "-d", month_arg.trim_end()];
+    let month_year = named_year(&months);
+    assert!(
+        month_year > 2_147_483_647 && month_year < 2_147_500_000,
+        "twelve max month counts reach just past the i32 range, got {month_year}"
+    );
+    // The fortnight arm of the same arithmetic: 14 days per unit, so
+    // twenty-seven of them carry the year out of range.
+    let fortnight_arg = "+2147483647 fortnights ".repeat(27);
+    let fortnights = vec!["date", "-d", fortnight_arg.trim_end()];
+    let day_year = named_year(&fortnights);
+    assert!(
+        day_year > 2_147_483_647,
+        "twenty-seven max fortnight counts reach a year past the i32 range, got {day_year}"
+    );
+    // Counts that stay in range still move the day by exactly what they say.
+    let today = run(&["date", "-d", "today", "-f", "%Y-%m-%d"]);
+    assert_eq!(
+        run(&["date", "-d", "2 fortnights", "-f", "%Y-%m-%d"]),
+        run(&["date", "-d", "28 days", "-f", "%Y-%m-%d"]),
+        "2 fortnights is 28 days, counted from {today}"
+    );
+}
+
 /// A backslash yields the character it escapes.
 ///
 /// `\n`, `\t` and `\r` had meanings and `\%` fell through to a catch-all that

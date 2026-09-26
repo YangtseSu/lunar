@@ -46,7 +46,12 @@ pub fn days_from_civil(y: i32, m: i32, d: i32) -> i64 {
 
 /// Inverse of [`days_from_civil`]: the civil date for a day number relative to
 /// the Unix epoch.
-pub fn civil_from_days(z: i64) -> (i32, i32, i32) {
+///
+/// The year is computed in `i64` and named when it no longer fits the `i32` it
+/// is stored in: a day count the user typed (`+2147483647 fortnights`, the
+/// twenty-seventh of which carries the year out of range) reaches a year past
+/// the representable one, and a wrapped year is a year nobody asked for.
+pub fn civil_from_days(z: i64) -> Result<(i32, i32, i32), CalError> {
     let z = z + 719_468;
     let era = if z >= 0 { z } else { z - 146_096 } / 146_097;
     let doe = z - era * 146_097; // [0, 146096]
@@ -56,7 +61,21 @@ pub fn civil_from_days(z: i64) -> (i32, i32, i32) {
     let mp = (5 * doy + 2) / 153; // [0, 11]
     let d = doy - (153 * mp + 2) / 5 + 1; // [1, 31]
     let m = mp + if mp < 10 { 3 } else { -9 }; // [1, 12]
-    ((y + i64::from(m <= 2)) as i32, m as i32, d as i32)
+    let year = y + i64::from(m <= 2);
+    Ok((
+        i32::try_from(year).map_err(|_| out_of_range(year))?,
+        m as i32,
+        d as i32,
+    ))
+}
+
+/// The error for a year the arithmetic reached but `i32` cannot hold.
+fn out_of_range(year: i64) -> CalError {
+    CalError::YearOutOfRange {
+        year,
+        min: calendar::MIN_YEAR,
+        max: calendar::MAX_YEAR,
+    }
 }
 
 /// A civil date with no time-of-day.
@@ -77,9 +96,9 @@ impl CivilDate {
     }
 
     /// The civil date `days` after 1970-01-01.
-    pub fn from_epoch_day(days: i64) -> Self {
-        let (year, month, day) = civil_from_days(days);
-        Self { year, month, day }
+    pub fn from_epoch_day(days: i64) -> Result<Self, CalError> {
+        let (year, month, day) = civil_from_days(days)?;
+        Ok(Self { year, month, day })
     }
 
     /// Day number relative to 1970-01-01.
@@ -131,21 +150,30 @@ impl CivilDate {
     }
 
     /// This date plus `delta` days.
-    pub fn add_days(self, delta: i64) -> Self {
+    ///
+    /// The day count is added in `i64` and the year it reaches is named when
+    /// that year no longer fits an `i32`; see [`civil_from_days`].
+    pub fn add_days(self, delta: i64) -> Result<Self, CalError> {
         Self::from_epoch_day(self.epoch_day() + delta)
     }
 
     /// This date plus `delta` months, clamping the day to the target month
     /// (2024-01-31 + 1 month → 2024-02-29).
-    pub fn add_months(self, delta: i32) -> Self {
+    ///
+    /// The month index is a number the user typed, so it is taken in `i64` and
+    /// the year it reaches is named when that year no longer fits an `i32`:
+    /// thirteen `+2147483647 months` reach a year past the representable one,
+    /// and a truncated `as i32` reported a year nobody asked for.
+    pub fn add_months(self, delta: i32) -> Result<Self, CalError> {
         let total = i64::from(self.year) * 12 + i64::from(self.month - 1) + i64::from(delta);
-        let year = (total.div_euclid(12)) as i32;
+        let year = total.div_euclid(12);
+        let year = i32::try_from(year).map_err(|_| out_of_range(year))?;
         let month = (total.rem_euclid(12) as i32) + 1;
-        Self {
+        Ok(Self {
             year,
             month,
             day: self.day.min(solar_util::days_of_month(year, month)),
-        }
+        })
     }
 
     /// This date plus `delta` years, clamping 2/29 to 2/28 in common years.
@@ -158,11 +186,8 @@ impl CivilDate {
     /// only answers whether it exists.
     pub fn add_years(self, delta: i32) -> Result<Self, CalError> {
         let year = i64::from(self.year) + i64::from(delta);
-        let year = i32::try_from(year).map_err(|_| CalError::YearOutOfRange {
-            year,
-            min: calendar::MIN_YEAR,
-            max: calendar::MAX_YEAR,
-        })?;
+        let year = i32::try_from(year).map_err(|_| out_of_range(year))?;
+
         Ok(Self {
             year,
             month: self.month,
