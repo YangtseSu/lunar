@@ -156,6 +156,31 @@ There is **no CI, no Makefile/justfile, no `rust-toolchain.toml`, no `rustfmt.to
 `[lints]` block and no dev-dependencies.** The lint/format gate is whatever you run
 locally; keep both clean. `Cargo.lock` is tracked; `target/` is not.
 
+## Commit Discipline
+
+**One completed feature per commit.** A commit is one coherent, working
+change — a fix, a behaviour, a doc correction — and nothing else. Never
+batch two features, and never let a commit sit half-done: a commit that
+does not build, does not pass `cargo test`, or leaves the tree in a
+state a reader cannot check out and understand is not a commit yet.
+
+**Commit documentation and behaviour together.** A change to a
+user-facing string moves the README, the `-f` tables, and the
+`Known Defects` list in the *same* commit as the code. A defect fixed is
+struck through or deleted in the same commit that fixes it — the list
+describes the state of the tree, not its history.
+
+**Message.** One imperative subject line, under 72 characters, naming the
+behaviour and not the files; the body explains what was wrong, why it
+mattered, and what changed. The recent history is prose subjects
+(`Paint the statutory calendar and the reference day, and drop the cell
+labels`), not conventional-commit prefixes.
+
+**Never `git push` without an explicit instruction.** Commit locally as
+far as the work goes; pushing is the user's call and requires a direct
+request. Do not push "to finish up", do not push because a branch is
+ahead, and do not run `git push` as part of any other command.
+
 ## Code Conventions & Common Patterns
 
 **Comment / language policy (strictly mixed).**
@@ -363,7 +388,9 @@ the uncoloured grid), `-R` leap-month gating, the two `date` channels agreeing e
 the calendar they read (including `-R` through `-d`), the keyword / `@epoch` / weekday /
 relative forms being unaffected by `-l`, a time-of-day refused on a lunar date, the
 `date -l` error paths, bare-year and month-span behaviour, the year-range and reform-gap
-error messages, both calendars' festivals (国庆节 as well as 中秋节), the 法定节假日
+error messages, a `-L` month outside `1..=12` reported rather than indexed
+(`out_of_range_lunar_months_are_reported_not_indexed`), both calendars' festivals
+(国庆节 as well as 中秋节), the 法定节假日
 **painting** by date (2026-10-01 .. 10-07 red, 2026-10-10 bold bright), that a statutory
 day still reads the calendar, that the statutory calendar and the reference day compose,
 the `法定` line of the profile, and — separately —
@@ -437,7 +464,10 @@ of unrelated work — surface them, or fix them deliberately with a test.
   Both channels now resolve through `datestr`, so `2023-02-30` is `公历 2023-02-30
   不存在` either way, and out-of-range components give `月份 13 非法 (应为 1–12)` on both.
 - `cal` uses `CalError::MonthOutOfRange { month: -1 }` as a generic "bad argument" sentinel
-  (`src/commands/cal.rs`), producing the misleading `月份 -1 非法 (应为 1–12)`.
+  (`src/commands/cal.rs`), producing the misleading `月份 -1 非法 (应为 1–12)` — a
+  non-numeric positional lands there. The *month* of a `-L` request is not one of them:
+  `select_lunar_months` calls `check_lunar_month` before the lookup, which is what keeps
+  `m_abs` from indexing past `lunar_util::MONTH` (`cal -L 2026 13` used to panic).
 - `-3` / `-n N` are silently ignored under `-L` whenever a positional is present.
 - `src/main.rs` parses `-m/--monday` and discards it; Monday is hard-coded. The README
   options table implies otherwise.
