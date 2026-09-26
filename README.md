@@ -51,6 +51,93 @@ $ lunar date -d 'next friday'
 $ lunar date -d '@1788000000'
 ```
 
+On a day the State Council legislates, the profile gains a `法定` line — the
+name of the holiday, and whether the day is off or one of the 调休 workdays
+moved onto a weekend:
+
+```console
+$ lunar date -d 2026-09-26
+公历: 2026年9月26日 星期六
+农历: 丙午年八月十六
+干支: 丙午 丁酉 癸卯
+生肖: 马
+法定: 中秋节 放假
+
+$ lunar date -d 2026-10-10
+公历: 2026年10月10日 星期六
+农历: 丙午年九月廿一
+干支: 丙午 戊戌 壬寅
+生肖: 马
+法定: 国庆节 调休上班
+```
+
+`-d` reads a **公历** date and `-l` a **农历** one; the two differ in nothing
+else. Every form `-d` accepts, `-l` accepts too — the same string is just
+resolved in the other calendar:
+
+```console
+$ lunar date -l -d 2026-07-15      # 农历 2026 年七月十五
+公历: 2026年8月27日 星期四
+农历: 丙午年七月十五
+
+$ lunar date -d 2026-07-15         # 公历 2026 年 7 月 15 日
+公历: 2026年7月15日 星期三
+农历: 丙午年六月初二
+```
+
+`-R` names the leap month — 庚子年闰四月初一是 2020 年 5 月 23 日:
+
+```console
+$ lunar date -l -R -d 2020-04-01
+公历: 2020年5月23日 星期六
+农历: 庚子年闰四月初一
+```
+
+The day can also be given as positionals, which follow the same rule:
+
+```console
+$ lunar date 2026 2 17
+$ lunar date -l 2026 7 15
+$ lunar date -d '2026-09-04'
+$ lunar date -d 'next friday'
+$ lunar date -d '@1788000000'
+```
+
+Only the forms that name a *date* switch. `now`, `tomorrow`, `next friday` and
+`+3 days` are statements about days, not about a date written in one calendar,
+so they resolve against the reference day exactly as they do without `-l`.
+A time of day (`T15:30`) belongs to the 公历 grammar and is **refused** under
+`-l` rather than ignored, so a lunar date never looks like it honoured a time it
+threw away.
+
+On a day the State Council legislates, the profile gains a `法定` line — the
+name of the holiday, and whether the day is off or one of the 调休 workdays
+moved onto a weekend:
+
+```console
+$ lunar date -d 2026-09-26
+公历: 2026年9月26日 星期六
+农历: 丙午年八月十六
+干支: 丙午 丁酉 癸卯
+生肖: 马
+法定: 中秋节 放假
+
+$ lunar date -d 2026-10-10
+公历: 2026年10月10日 星期六
+农历: 丙午年九月廿一
+干支: 丙午 戊戌 壬寅
+生肖: 马
+法定: 国庆节 调休上班
+```
+
+A date that does not exist in the calendar named is reported as such, with the
+lunar month's real length:
+
+```console
+$ lunar date -l -d 2026-07-31
+lunar: 农历 2026 年七月没有第 31 天 (该月只有 29 天)
+```
+
 `-d` understands `now` / `today` / `tomorrow` / `yesterday`, epoch seconds
 (`@…`), ISO 8601 dates and times (with `Z` or `±hh:mm` zones), `YYYY/MM/DD`,
 `MM/DD/YYYY`, relative offsets (`+3 days`, `-2 weeks`, `90 minutes ago`,
@@ -95,29 +182,63 @@ same table.
 ## `lunar cal`
 
 Without arguments it prints the current civil month, with the lunar day, solar
-term or festival under each date:
+term or festival under each date. The example below was captured on 2026-09-26,
+which is why that cell reads 放假 — the day is on the statutory calendar — and
+why nothing is coloured: stdout was a pipe.
 
 ```console
 $ lunar cal 2026 9
 2026年9月
-一      二      三      四      五      六      日
-        1       2       3       4       5       6
-        二十    廿一    廿二    廿三    廿四    廿五
-7       8       9       10      11      12      13
-白露    廿七    廿八    廿九    八月    初二    初三
-14      15      16      17      18      19      20
-初四    初五    初六    初七    初八    初九    初十
-21      22      23      24      25      26      27
-十一    十二    秋分    十四    中秋节  十六    十七
-28      29      30
-十八    十九    二十
+一              二              三              四              五              六              日
+                1               2               3               4               5               6
+                二十            廿一            廿二            廿三            廿四            廿五
+7               8               9               10              11              12              13
+白露            廿七            廿八            教师节          八月            初二            初三
+14              15              16              17              18              19              20
+初四            初五            初六            初七            初八            全民国防教育日  班
+21              22              23              24              25              26              27
+十一            十二            秋分            十四            放假            中秋节          中秋节
+28              29              30
+十八            十九            二十
 ```
 
-Cell content follows a fixed priority — **节日 > 初一显示月份名 > 节气 > 农历日** —
-so 11 September shows 八月 instead of 初一, 7 September is covered by 白露 and
-25 September by 中秋节. Both calendars' festivals count: 1 October shows 国庆节,
-and a day carrying several shows the one a reader recognises, so 十月十日 is
-地藏节 rather than the more obscure 天灸日.
+Cell content follows a fixed priority —
+**法定节假日 > 节日 > 初一显示月份名 > 节气 > 农历日** — so 11 September shows
+八月 instead of 初一, 7 September is covered by 白露 and 25 September by 中秋节.
+Both calendars' festivals count: 1 October shows 国庆节, and a day carrying
+several shows the one a reader recognises, so 十月十日 is 地藏节 rather than the
+more obscure 天灸日.
+
+### The statutory calendar, and the reference day
+
+`lunar cal` shows China's 法定节假日, which is a published table and not a
+festival: a 放假 day shows the name the State Council gave it, and a 调休
+workday — a weekend the State Council moved onto a working day — shows `班`:
+
+```console
+$ lunar cal 2026 10
+2026年10月
+一          二          三          四          五          六          日
+                                    1           2           3           4
+                                    放假        国庆节      国庆节      国庆节
+5           6           7           8           9           10          11
+国庆节      国庆节      国庆节      寒露        廿九        班          初二
+```
+
+Three kinds of day are marked, and all three are **attributes, never
+characters**, so the grid is as legible in a file as on a terminal:
+
+| mark | shown as |
+|---|---|
+| 法定节假日 放假 | red |
+| 调休 上班 | bold bright yellow |
+| the reference day — today, or the local date the run resolved | inverse video |
+
+Colour is emitted only when stdout is a terminal; `--color` forces it on (for
+`less -R` and `grep --color`), `--no-color` forces it off, and `--no-holiday`
+drops the statutory level entirely while leaving the reference day marked.
+Because the text carries the same information, a piped or redirected grid loses
+the highlighting and nothing else — the 放假 and 班 cells still read as such.
 
 `-L` switches to lunar months, where each cell leads with the civil date:
 
@@ -154,6 +275,8 @@ Options:
 | `--number` | lunar day as digits instead of 初一/廿六 |
 | `--no-month-name` | never replace 初一 with the month name |
 | `--no-festival` | never show festivals |
+| `--no-holiday` | never show 法定节假日 (放假 / 调休) |
+| `--color` / `--no-color` | force SGR on or off (default: only when stdout is a terminal) |
 
 `lunar cal -L 2026` walks the whole lunar year, so it picks up a leap month on
 its own; an explicit `-L 2020 4` prints the ordinary fourth month, and
@@ -172,8 +295,9 @@ terminal with a CJK-capable font.
 
 ## Implementation notes
 
-- `src/calendar.rs` — the supported range, festival and ganzhi helpers, lunar
-  month lookups. All answers come from `lunar-rs`.
+- `src/calendar.rs` — the supported range, festival, ganzhi and statutory-holiday
+  helpers, solar↔lunar conversion in both directions. All answers come from
+  `lunar-rs`.
 - `src/civil.rs` — the epoch ↔ civil-date bridge. `lunar-rs` models the 1582
   Gregorian reform, so its `Solar` refuses 1582-10-05..14; the civil arithmetic
   needed by the `-d` parser and the grids lives here.
@@ -182,6 +306,7 @@ terminal with a CJK-capable font.
   width is the widest cell the grid holds, so a month carrying `中秋节` is wider
   than one that does not; days of the neighbouring months are blank.
 - `src/cell.rs` — the cell content priority.
+- `src/mark.rs` — the reference-day / 放假 / 调休 marks and the SGR painting.
 - `src/datestr.rs` — the `date(1)` style `-d` parser.
 - `src/format.rs` — the `-f` token engine.
 - `src/lang.rs` — the display-width measurement the grid layout depends on.
@@ -190,6 +315,12 @@ terminal with a CJK-capable font.
 Festivals come from both calendars: the lunar ones (春节, 中秋节, 端午) and the
 civil ones (国庆节, 劳动节, 儿童节), including those that float to a weekday
 (母亲节, 感恩节). `--no-festival` turns off both.
+
+The 法定节假日 table is a third source and is kept apart from both: it is a
+published calendar, not a festival, and a 调休 Saturday is exactly the day the
+weekday and the festival list both get wrong. `lunar-rs` ships it only for the
+years it was given (2001-2026 at this release), so a grid outside that window
+shows festivals and no statutory marks rather than guessing.
 
 `lunar-rs` numbers months from 正月 (`寅`) for the month pillar, which is the
 traditional almanac convention; `tz-rs` resolves `TZ` for the local "today".

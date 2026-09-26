@@ -17,6 +17,7 @@ mod commands;
 mod datestr;
 mod format;
 mod lang;
+mod mark;
 mod tz;
 
 use std::io::Write as _;
@@ -49,7 +50,7 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// 某一天的农历档案：公历/星期/农历/干支/生肖/节气
+    /// 某一天的农历档案：公历/星期/农历/干支/生肖/节气/法定
     Date {
         /// 日期，date 风格，如 '2026-09-04'（缺省为今天）
         #[arg(short = 'd', long = "date", value_name = "DATE")]
@@ -58,6 +59,14 @@ enum Command {
         /// 自定义输出格式（令牌见 `lunar date --help-format`）
         #[arg(short = 'f', long = "format", value_name = "FORMAT")]
         format: Option<String>,
+
+        /// 位置参数按农历解读（`-d` 仍为公历）
+        #[arg(short = 'l', long = "lunar")]
+        lunar: bool,
+
+        /// (-l 时)选择闰月
+        #[arg(short = 'R', long = "leap")]
+        leap: bool,
 
         /// 打印令牌说明
         #[arg(long = "help-format", action = ArgAction::SetTrue)]
@@ -68,7 +77,7 @@ enum Command {
         positional: Vec<String>,
     },
 
-    /// 公历月内叠加农历日/节气/节日，或单独显示农历月
+    /// 公历月内叠加农历日/节气/节日/法定节假日，或单独显示农历月
     Cal {
         /// 单独显示农历月
         #[arg(short = 'L', long = "lunar")]
@@ -110,6 +119,18 @@ enum Command {
         #[arg(long = "no-festival")]
         no_festival: bool,
 
+        /// 关闭法定节假日(放假/调休)
+        #[arg(long = "no-holiday")]
+        no_holiday: bool,
+
+        /// 始终着色(默认只在终端着色)
+        #[arg(long = "color")]
+        color: bool,
+
+        /// 不着色
+        #[arg(long = "no-color")]
+        no_color: bool,
+
         /// 位置参数：公历年/公历月，或 -L 农历年/农历月
         #[arg(value_name = "年 [月]")]
         positional: Vec<String>,
@@ -131,6 +152,8 @@ fn main() -> ExitCode {
         Command::Date {
             date,
             format,
+            lunar,
+            leap,
             help_format,
             positional,
         } => {
@@ -142,6 +165,8 @@ fn main() -> ExitCode {
                 &date::DateArgs {
                     date: date.clone(),
                     format: format.clone(),
+                    lunar: *lunar,
+                    leap: *leap,
                     positional: positional.clone(),
                 },
                 today,
@@ -159,10 +184,20 @@ fn main() -> ExitCode {
             number,
             no_month_name,
             no_festival,
+            no_holiday,
+            color,
+            no_color,
             positional,
         } => {
             // `-m` is the default; `-s` is what actually changes the first column.
             let _ = monday;
+            // The last flag on the command line wins, so `--color --no-color`
+            // is never, and `--no-color --color` always.
+            let color = match (color, no_color) {
+                (false, true) => mark::Color::Never,
+                (true, _) => mark::Color::Always,
+                _ => mark::Color::Auto,
+            };
             cal::run(
                 &cal::CalArgs {
                     positional: positional.clone(),
@@ -175,6 +210,8 @@ fn main() -> ExitCode {
                     number: *number,
                     no_month_name: *no_month_name,
                     no_festival: *no_festival,
+                    no_holiday: *no_holiday,
+                    color,
                 },
                 today,
                 &mut out,

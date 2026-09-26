@@ -140,11 +140,15 @@ fn civil_festivals_are_shown_too() {
 }
 
 /// The civil festivals a reader scans for, each on the day the engine gives.
+///
+/// `--no-holiday` because a festival the State Council legislates a day off
+/// for is covered by the statutory label instead — 青年节 falls inside the 劳动
+/// 节 holiday — and this test is about the festival list, not the two of them.
 #[test]
 fn the_usual_civil_festivals_appear() {
     let mut year = String::new();
     for month in 1..=12 {
-        year.push_str(&run(&["cal", "2026", &month.to_string()]));
+        year.push_str(&run(&["cal", "2026", &month.to_string(), "--no-holiday"]));
     }
     for festival in [
         "元旦节",
@@ -205,6 +209,228 @@ fn run_failing(args: &[&str]) -> String {
         .to_string()
 }
 
+/// The cell of a given day, read out of a grid by its column.
+///
+/// The grid is a two-band layout, so the day labels and the cell contents are
+/// separate lines and a day is located by finding the label first.
+fn cell_of(grid: &str, label: &str) -> String {
+    let lines: Vec<&str> = grid.lines().collect();
+    let row = lines
+        .iter()
+        .position(|line| line.split_whitespace().any(|cell| cell == label))
+        .unwrap_or_else(|| panic!("no cell labelled {label} in:\n{grid}"));
+    let column = lines[row]
+        .split_whitespace()
+        .position(|cell| cell == label)
+        .expect("the label is a cell of its own");
+    lines[row + 1]
+        .split_whitespace()
+        .nth(column)
+        .unwrap_or_else(|| panic!("{label} has no content in:\n{grid}"))
+        .to_string()
+}
+
+/// The statutory calendar, as the grid states it: a 放假 day carries the name
+/// the State Council gave it, and a 调休 workday is labelled 班 — never with
+/// a festival or a solar term, which the weekday would have suggested.
+#[test]
+fn statutory_holidays_and_workdays_are_marked() {
+    let october = run(&["cal", "2026", "10"]);
+    assert_eq!(cell_of(&october, "1"), "放假");
+    assert_eq!(cell_of(&october, "5"), "国庆节");
+    // 2026-10-10 is a Saturday the State Council turned into a workday.
+    assert_eq!(cell_of(&october, "10"), "班");
+
+    let january = run(&["cal", "2026", "1"]);
+    assert_eq!(cell_of(&january, "1"), "放假");
+    assert_eq!(cell_of(&january, "2"), "元旦节");
+    assert_eq!(cell_of(&january, "4"), "班");
+
+    // 2026 春节 runs 2/17..2/23; the day before it is a 调休 workday.
+    let spring = run(&["cal", "-L", "2026", "1"]);
+    assert_eq!(cell_of(&spring, "2/17"), "放假");
+    assert_eq!(cell_of(&spring, "2/28"), "班");
+}
+
+/// A 放假 day whose name a traditional festival already gives shows 放假
+/// instead, so 中秋节 is not printed twice in the same cell.
+#[test]
+fn a_holiday_named_by_a_festival_shows_rest_once() {
+    let september = run(&["cal", "2026", "9"]);
+    // 9/25 is 中秋节, the first day of the 中秋 holiday; 9/26 and 9/27 keep it.
+    for day in ["25", "26", "27"] {
+        assert_eq!(
+            cell_of(&september, day),
+            if day == "25" { "放假" } else { "中秋节" },
+            "the 中秋 holiday on 2026-09-{day}:\n{september}"
+        );
+    }
+    // 9/20 is a 调休 Sunday.
+    assert_eq!(cell_of(&september, "20"), "班");
+}
+
+/// `--no-holiday` drops the statutory level only; the festivals underneath
+/// stay, and the reference day is unaffected.
+#[test]
+fn no_holiday_switch_turns_off_only_the_statutory_level() {
+    let plain = run(&["cal", "2026", "10", "--no-holiday"]);
+    assert!(
+        !plain.contains("放假") && !plain.contains("班"),
+        "the statutory level is off:\n{plain}"
+    );
+    assert!(plain.contains("国庆节"), "the festivals remain:\n{plain}");
+}
+
+/// A cell is painted, never decorated with a character, so the text of a grid
+/// is identical whether or not SGR is emitted. Only the escapes differ.
+#[test]
+fn colour_adds_escapes_and_nothing_else() {
+    let plain = run(&["cal", "2026", "10", "--no-color"]);
+    let colored = run(&["cal", "2026", "10", "--color"]);
+    // The suite's stdout is a pipe, so the default is already uncoloured.
+    assert_eq!(run(&["cal", "2026", "10"]), plain);
+    assert!(colored.contains("\u{1b}["), "SGR runs are present");
+    // Trailing padding is not compared: an inverse-video cell is padded inside
+    // its own SGR run, so its reset follows the spaces.
+    let stripped_sgr = strip_sgr(&colored);
+    let stripped: Vec<&str> = stripped_sgr.lines().map(str::trim_end).collect();
+    let plain: Vec<&str> = plain.lines().map(str::trim_end).collect();
+    assert_eq!(
+        stripped, plain,
+        "stripping SGR must leave the grid unchanged"
+    );
+}
+
+/// Removes every SGR sequence, leaving the text the grid would print without
+/// colour.
+fn strip_sgr(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut chars = text.chars();
+    while let Some(c) = chars.next() {
+        if c != '\u{1b}' {
+            out.push(c);
+            continue;
+        }
+        for c in chars.by_ref() {
+            if c == 'm' {
+                break;
+            }
+        }
+    }
+    out
+}
+
+/// The profile reports the statutory calendar even in its default form: 放假
+/// and 调休上班 are the one thing about a day the other lines cannot say.
+#[test]
+fn date_profile_reports_the_statutory_calendar() {
+    assert_eq!(
+        run(&["date", "-d", "2026-09-26"]).lines().last(),
+        Some("法定: 中秋节 放假")
+    );
+    assert_eq!(
+        run(&["date", "-d", "2026-10-10"]).lines().last(),
+        Some("法定: 国庆节 调休上班")
+    );
+    assert!(
+        !run(&["date", "-d", "2026-09-10"]).contains("法定"),
+        "an ordinary day has no 法定 line"
+    );
+}
+
+/// A lunar date is answered with the civil day it falls on. `-R` names the
+/// leap month, exactly as `cal -L -R` does.
+#[test]
+fn a_lunar_date_resolves_to_its_civil_day() {
+    assert_eq!(
+        run(&["date", "-l", "2026", "7", "15"]),
+        run(&["date", "-d", "2026-08-27"])
+    );
+    assert_eq!(
+        run(&["date", "-l", "2020", "4", "1", "-R"]),
+        "公历: 2020年5月23日 星期六\n农历: 庚子年闰四月初一\n干支: 庚子 辛巳 丙寅\n生肖: 鼠"
+    );
+    // A lunar month that the year does not have.
+    assert!(run_failing(&["date", "-l", "2026", "13", "1"]).contains("农历月份 13 非法"));
+    // A day the lunar month does not have, reported with its length.
+    assert!(run_failing(&["date", "-l", "2026", "7", "31"]).contains("该月只有 29 天"));
+    assert!(run_failing(&["date", "-l", "10000", "1", "1"]).contains("超出支持范围"));
+}
+
+/// `-d` reads 公历 and `-l` reads 农历, and nothing else differs between
+/// them: the same date, written either way, resolves to the same day.
+#[test]
+fn the_two_channels_differ_only_in_the_calendar_they_read() {
+    // 农历 2026-07-15 is 公历 2026-08-27.
+    let lunar_forms: &[&[&str]] = &[
+        &["date", "-l", "-d", "2026-07-15"],
+        &["date", "-l", "-d", "20260715"],
+        &["date", "-l", "-d", "2026/07/15"],
+        &["date", "-l", "2026", "7", "15"],
+        &["date", "-l", "2026", "07", "15"],
+    ];
+    for args in lunar_forms {
+        assert_eq!(
+            run(args),
+            run(&["date", "-d", "2026-08-27"]),
+            "`date {}` is not 农历 2026-07-15",
+            args.join(" ")
+        );
+    }
+    // The same strings without `-l` are the 公历 dates they look like.
+    let civil_forms: &[&[&str]] = &[
+        &["date", "-d", "2026-07-15"],
+        &["date", "-d", "20260715"],
+        &["date", "-d", "2026/07/15"],
+    ];
+    for args in civil_forms {
+        assert_eq!(
+            run(args),
+            run(&["date", "-d", "2026-07-15"]),
+            "`date {}` must stay 公历",
+            args.join(" ")
+        );
+    }
+    // `-R` reaches the leap month through `-d` exactly as it does through the
+    // positionals.
+    assert_eq!(
+        run(&["date", "-l", "-R", "-d", "2020-04-01"]),
+        run(&["date", "-l", "2020", "4", "1", "-R"])
+    );
+}
+
+/// The forms that name a day rather than a date — a keyword, an epoch, a
+/// weekday, a relative offset — are not written in either calendar, so `-l`
+/// must not change them. Only the absolute forms switch.
+#[test]
+fn day_relative_forms_are_unaffected_by_the_calendar_flag() {
+    for form in [
+        "now",
+        "today",
+        "tomorrow",
+        "yesterday",
+        "@1788000000",
+        "monday",
+        "next friday",
+        "+3 days",
+    ] {
+        assert_eq!(
+            run(&["date", "-d", form]),
+            run(&["date", "-l", "-d", form]),
+            "`-d {form}` must not depend on `-l`"
+        );
+    }
+}
+
+/// A time of day is part of the 公历 grammar. Under `-l` it is refused rather
+/// than dropped, so a lunar date never looks like it honoured a time it threw
+/// away.
+#[test]
+fn a_time_of_day_is_refused_on_a_lunar_date() {
+    assert!(run(&["date", "-d", "2026-07-15T15:30"]).contains("公历: 2026年7月15日"));
+    assert!(run_failing(&["date", "-l", "-d", "2026-07-15T15:30"]).contains("无法解析"));
+}
+
 #[test]
 fn date_profile_matches_documented_output() {
     assert_eq!(
@@ -229,7 +455,7 @@ fn date_accepts_positional_year_month_day() {
     );
     assert_eq!(
         run(&["date", "2026", "2", "17"]),
-        "公历: 2026年2月17日 星期二\n农历: 丙午年正月初一\n干支: 丙午 庚寅 壬戌\n生肖: 马"
+        "公历: 2026年2月17日 星期二\n农历: 丙午年正月初一\n干支: 丙午 庚寅 壬戌\n生肖: 马\n法定: 春节 放假"
     );
 }
 
@@ -289,9 +515,9 @@ fn civil_overlay_grid_matches_documented_output() {
 7               8               9               10              11              12              13
 白露            廿七            廿八            教师节          八月            初二            初三
 14              15              16              17              18              19              20
-初四            初五            初六            初七            初八            全民国防教育日  初十
+初四            初五            初六            初七            初八            全民国防教育日  班
 21              22              23              24              25              26              27
-十一            十二            秋分            十四            中秋节          十六            十七
+十一            十二            秋分            十四            放假            中秋节          中秋节
 28              29              30
 十八            十九            二十"#;
     assert_eq!(run(&["cal", "2026", "9"]), expected);
@@ -412,7 +638,14 @@ fn number_flag_replaces_chinese_lunar_day() {
 
 #[test]
 fn month_name_and_festival_overlays_can_be_disabled() {
-    let plain = run(&["cal", "2026", "9", "--no-month-name", "--no-festival"]);
+    let plain = run(&[
+        "cal",
+        "2026",
+        "9",
+        "--no-month-name",
+        "--no-festival",
+        "--no-holiday",
+    ]);
     assert!(
         !plain.contains("八月"),
         "month name overlay disabled:\n{plain}"
@@ -420,6 +653,10 @@ fn month_name_and_festival_overlays_can_be_disabled() {
     assert!(
         !plain.contains("中秋节"),
         "festival overlay disabled:\n{plain}"
+    );
+    assert!(
+        !plain.contains("放假"),
+        "holiday overlay disabled:\n{plain}"
     );
     assert!(
         plain.contains("初一"),
@@ -444,7 +681,10 @@ fn out_of_range_years_are_rejected() {
     assert!(run_failing(&["cal", "0", "1"]).contains("超出支持范围"));
     // The 1582 reform gap does not exist in the Gregorian calendar.
     assert!(run_failing(&["date", "-d", "1582-10-10"]).contains("不存在"));
-    assert!(run_failing(&["date", "-d", "2023-02-30"]).contains("无法解析"));
+    // A day the calendar does not have, now reported the same way through
+    // either channel: both resolve through `datestr`.
+    assert!(run_failing(&["date", "-d", "2023-02-30"]).contains("不存在"));
+    assert!(run_failing(&["date", "2023", "2", "30"]).contains("不存在"));
 }
 
 #[test]
@@ -493,6 +733,9 @@ fn small_years_parse() {
 #[test]
 fn solar_terms_and_festivals_sit_on_the_days_the_astronomy_gives() {
     // Each of these cells is checked by date, not by copying a sample grid.
+    // `--no-holiday` throughout: this is the term and festival layer, and the
+    // statutory level covers exactly the days a festival is legislated off for
+    // (2026 春节 runs 2/17..2/23, so 雨水 on 2/18 is a 放假 cell).
     let cases: &[(&[&str], &str)] = &[
         (&["cal", "2026", "9"], "白露"),
         (&["cal", "2026", "9"], "秋分"),
@@ -507,7 +750,9 @@ fn solar_terms_and_festivals_sit_on_the_days_the_astronomy_gives() {
         (&["cal", "-L", "2026", "1"], "惊蛰"),   // 2026-03-05
     ];
     for (args, expected) in cases {
-        let grid = run(args);
+        let mut args = args.to_vec();
+        args.push("--no-holiday");
+        let grid = run(&args);
         assert!(
             grid.contains(expected),
             "expected {expected} in `lunar {}`:\n{grid}",

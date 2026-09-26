@@ -3,13 +3,13 @@
 //! Two views, each with a date band over a lunar content band:
 //!
 //! * **civil overlay** — one civil month, each cell `solar day` over
-//!   `lunar day / solar term / festival`:
+//!   `lunar day / solar term / festival / statutory holiday`:
 //!
 //!   ```text
-//!         2026年9月
-//!     一      二      三      四      五      六      日
-//!           1       2       3       4       5       6
-//!           二十    廿一    廿二    廿三    廿四    廿五
+//!           2026年9月
+//!       一      二      三      四      五      六      日
+//!             1       2       3       4       5       6
+//!             二十    廿一    廿二    廿三    廿四    廿五
 //!   ```
 //!
 //! * **lunar month** (`-L`) — one lunar month, each cell `M/D` over the same
@@ -23,7 +23,9 @@
 //!   ```
 //!
 //! Layout rules:
-//!
+//! * a cell is painted, never decorated with a character: today, 放假 and
+//!   调休 are attributes (see [`crate::mark`]), so the grid stays aligned
+//!   whether or not stdout is a terminal;
 //! * cells are padded to a common width measured in **display columns**
 //!   (`lang::width`), not characters, so a two-glyph label and a five-digit
 //!   date line up;
@@ -37,12 +39,13 @@
 
 use std::fmt::Write as _;
 
-use lunar_rs::LunarMonth;
+use lunar_rs::{LunarMonth, Solar};
 
 use crate::calendar::{self, CalError};
 use crate::cell::{self, CellStyle};
 use crate::civil::CivilDate;
 use crate::lang;
+use crate::mark::{self, Color, Mark};
 
 /// Blank columns between two cells, so a cell that exactly fills its column
 /// still reads as separate from its neighbour.
@@ -72,6 +75,8 @@ struct Entry {
     content: String,
     /// `false` for the padding slots of the neighbouring months.
     in_month: bool,
+    /// What the cell is painted with.
+    mark: Mark,
 }
 
 /// A run of consecutive days forming one grid.
@@ -80,6 +85,8 @@ pub struct Grid {
     days: Vec<Entry>,
     column: usize,
     week_start: i32,
+    /// Whether SGR escapes are emitted.
+    color: bool,
 }
 
 impl Grid {
@@ -92,6 +99,8 @@ impl Grid {
         month: LunarMonth,
         week_start: i32,
         style: CellStyle,
+        today: CivilDate,
+        color: Color,
     ) -> Result<Self, CalError> {
         let first = calendar::lunar_month_start(&month);
         let lead = (first.weekday() - week_start).rem_euclid(7) as usize;
@@ -106,6 +115,8 @@ impl Grid {
                 week_start,
             },
             style,
+            today,
+            color,
         )
     }
 
@@ -116,6 +127,8 @@ impl Grid {
         month: i32,
         week_start: i32,
         style: CellStyle,
+        today: CivilDate,
+        color: Color,
     ) -> Result<Self, CalError> {
         let count = calendar::days_in_civil_month(year, month) as usize;
         let lead = calendar::week_offset(year, month, week_start);
@@ -129,14 +142,22 @@ impl Grid {
                 week_start,
             },
             style,
+            today,
+            color,
         )
     }
+
     /// Fills whole weeks starting at the month's first day.
     ///
     /// `first` is day 1 of the month; slot `lead` holds it and the slots
     /// before and after the month are blank padding. Every day of the month
     /// gets exactly one slot, so the last day is never dropped.
-    fn build(spec: Month, style: CellStyle) -> Result<Self, CalError> {
+    fn build(
+        spec: Month,
+        style: CellStyle,
+        today: CivilDate,
+        color: Color,
+    ) -> Result<Self, CalError> {
         let Month {
             title,
             first,
@@ -150,26 +171,29 @@ impl Grid {
         for index in 0..slots {
             let offset = index as i64 - lead as i64;
             let in_month = offset >= 0 && (offset as usize) < count;
-            let (label, content) = match in_month {
+            let (label, content, mark) = match in_month {
                 true => {
-                    let solar = first.add_days(offset).to_solar()?;
+                    let date = first.add_days(offset);
+                    let solar = date.to_solar()?;
                     let lunar = solar.lunar();
                     let label = match lunar_view {
                         true => format!("{}/{}", solar.month(), solar.day()),
                         false => solar.day().to_string(),
                     };
+                    let mark = day_mark(&solar, date, today, style);
                     let content = match lunar_view {
-                        true => cell::lunar_month_content(&solar, &lunar, style),
-                        false => cell::content(&solar, &lunar, style),
+                        true => cell::lunar_month_content(&solar, &lunar, style, mark),
+                        false => cell::content(&solar, &lunar, style, mark),
                     };
-                    (label, content)
+                    (label, content, mark)
                 }
-                false => (String::new(), String::new()),
+                false => (String::new(), String::new(), Mark::None),
             };
             days.push(Entry {
                 label,
                 content,
                 in_month,
+                mark,
             });
         }
         let column = column_width(&days, week_start);
@@ -178,6 +202,7 @@ impl Grid {
             days,
             column,
             week_start,
+            color: color.enabled(),
         })
     }
 
@@ -209,18 +234,38 @@ impl Grid {
         line.trim_end().to_string()
     }
 
-    /// One output line; `text` supplies each cell's content.
-    fn row_line<'e>(&self, chunk: &'e [Entry], text: impl Fn(&'e Entry) -> &'e str) -> String {
+    /// One output line; `band` supplies each cell's text.
+    fn row_line<'e>(&self, chunk: &'e [Entry], band: impl Fn(&'e Entry) -> &'e str) -> String {
         let mut line = String::with_capacity((self.column + GUTTER) * 7);
         for entry in chunk {
             let cell = match entry.in_month {
-                true => text(entry),
+                true => band(entry),
                 false => "",
             };
-            line.push_str(&lang::pad_right(cell, self.column));
+            mark::paint(&mut line, entry.mark, cell, self.column, self.color);
             line.push_str(&" ".repeat(GUTTER));
         }
         line.trim_end().to_string()
+    }
+}
+
+/// What a day is marked with.
+///
+/// The reference day wins every argument, then 法定节假日 放假, then 调休: a
+/// 调休 Saturday is off in every sense but the one the calendar made it.
+/// `style.holiday` gates the statutory marks only, so `--no-holiday` leaves
+/// the reference day highlighted.
+fn day_mark(solar: &Solar, date: CivilDate, today: CivilDate, style: CellStyle) -> Mark {
+    if date == today {
+        return Mark::Today;
+    }
+    if !style.holiday {
+        return Mark::None;
+    }
+    match calendar::legal_holiday(solar) {
+        Some(holiday) if holiday.is_work() => Mark::Work,
+        Some(_) => Mark::Rest,
+        None => Mark::None,
     }
 }
 

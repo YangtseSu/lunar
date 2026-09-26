@@ -10,7 +10,14 @@
 //! 节气：白露
 //! ```
 //!
-//! The `节气` line disappears when the day carries no solar term.
+//! The `节气` line disappears when the day carries no solar term, and the
+//! `放假` / `班` line appears only when the day is on the statutory calendar.
+//!
+//! The day is a **civil** one by default; `-l` reads the same three positionals
+//! as lunar instead, and `-R` picks the leap month, so `date -l 2020 4 1 -R`
+//! is 2020-05-23.
+
+use std::fmt::Write as _;
 
 use lunar_rs::Solar;
 
@@ -19,8 +26,6 @@ use crate::civil::CivilDate;
 use crate::datestr;
 use crate::format;
 
-use std::fmt::Write as _;
-
 /// Everything `lunar date` was asked to do.
 #[derive(Debug, Clone)]
 pub struct DateArgs {
@@ -28,6 +33,10 @@ pub struct DateArgs {
     pub date: Option<String>,
     /// `-f`: a custom format string.
     pub format: Option<String>,
+    /// `-l`: read the positionals as a lunar date.
+    pub lunar: bool,
+    /// `-R`: with `-l`, select the leap month.
+    pub leap: bool,
     /// Positional `年 月 日`, or a single date string.
     pub positional: Vec<String>,
 }
@@ -47,24 +56,34 @@ pub fn run(args: &DateArgs, today: CivilDate, out: &mut String) -> Result<(), Ca
 }
 
 /// Resolves the requested day from `-d` or the positional arguments.
+///
+/// Both channels accept the same dates and differ only in the calendar they are
+/// read in, so both go through [`datestr`]: a `-d` string and a single
+/// positional through [`datestr::parse`], the three positionals through
+/// [`datestr::from_parts`]. Sharing the reading is the point — a form one
+/// channel accepts the other must accept too, with the same failure.
 fn resolve(args: &DateArgs, today: CivilDate) -> Result<CivilDate, CalError> {
+    let calendar = datestr::Calendar::Lunar { leap: args.leap };
+    let calendar = match args.lunar {
+        true => calendar,
+        false => datestr::Calendar::Civil,
+    };
+
     if let Some(date) = &args.date {
-        return datestr::parse(date, today);
+        return datestr::parse(date, today, calendar);
     }
     match args.positional.as_slice() {
         [] => Ok(today),
-        [one] => datestr::parse(one, today),
         [year, month, day, ..] => {
-            let year: i32 = number(year)?;
-            let month: i32 = number(month)?;
-            let day: i32 = number(day)?;
-            calendar::check_year(year)?;
-            calendar::check_month(month)?;
-            calendar::check_day(day)?;
-            let date = CivilDate::new(year, month, day);
-            date.to_solar()?;
-            Ok(date)
+            let year = number(year)?;
+            let month = number(month)?;
+            let day = number(day)?;
+            datestr::from_parts(year, month, day, calendar)
         }
+        // A single positional is a `date(1)` string, in whichever calendar
+        // `-l` selected — `now`, `next friday`, `2026-07-15` all read the
+        // same way in both.
+        [one] => datestr::parse(one, today, calendar),
         _ => Err(CalError::UnparsableDate {
             input: args.positional.join(" "),
         }),
@@ -106,5 +125,11 @@ fn write_profile(solar: Solar, out: &mut String) {
     let _ = writeln!(out, "生肖: {}", calendar::sheng_xiao(&lunar));
     if let Some(term) = calendar::jie_qi(&lunar) {
         let _ = writeln!(out, "节气: {term}");
+    }
+    // The statutory calendar is the one overlay the profile reports even in
+    // its default form: 放假 and 班 change what the day *is*, not what it is
+    // called, and no other line of the profile says either.
+    if let Some(line) = calendar::legal_holiday_line(&solar) {
+        let _ = writeln!(out, "{line}");
     }
 }

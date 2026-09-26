@@ -8,7 +8,10 @@
 //! * `-L` switches from civil months to lunar months, `-R` picks the leap month
 //! * `-s` / `-m` pick the first column (Monday is the default), `-y`, `-3`, `-n N`
 //!   extend the range
-//! * `--number`, `--no-month-name`, `--no-festival` change cell content
+//! * `--number`, `--no-month-name`, `--no-festival`, `--no-holiday` change cell
+//!   content
+//! * `--color` / `--no-color` override the automatic SGR of the reference day,
+//!   the 法定节假日 and the 调休 marks
 
 use std::sync::Arc;
 
@@ -18,6 +21,7 @@ use crate::calendar::{self, CalError, MAX_YEAR};
 use crate::calgrid::{self, Grid};
 use crate::cell::CellStyle;
 use crate::civil::CivilDate;
+use crate::mark::Color;
 
 /// Everything `lunar cal` was asked to do.
 #[derive(Debug, Clone)]
@@ -42,6 +46,10 @@ pub struct CalArgs {
     pub no_month_name: bool,
     /// `--no-festival`.
     pub no_festival: bool,
+    /// `--no-holiday`.
+    pub no_holiday: bool,
+    /// `--color` / `--no-color`.
+    pub color: Color,
 }
 
 /// Runs `lunar cal`, writing to `out`.
@@ -50,14 +58,16 @@ pub fn run(args: &CalArgs, today: CivilDate, out: &mut String) -> Result<(), Cal
         number: args.number,
         month_name: !args.no_month_name,
         festival: !args.no_festival,
+        holiday: !args.no_holiday,
     };
+    let color = args.color;
     // Monday is the default first column, `-s` switches to Sunday.
     let week_start = if args.sunday { 0 } else { 1 };
 
     if args.lunar {
-        run_lunar(args, today, style, week_start, out)
+        run_lunar(args, today, style, color, week_start, out)
     } else {
-        run_civil(args, today, style, week_start, out)
+        run_civil(args, today, style, color, week_start, out)
     }
 }
 
@@ -66,6 +76,7 @@ fn run_civil(
     args: &CalArgs,
     today: CivilDate,
     style: CellStyle,
+    color: Color,
     week_start: i32,
     out: &mut String,
 ) -> Result<(), CalError> {
@@ -107,6 +118,8 @@ fn run_civil(
             cursor.month,
             week_start,
             style,
+            today,
+            color,
         )?;
         grid.render(out);
         cursor = cursor.add_months(1);
@@ -119,6 +132,7 @@ fn run_lunar(
     args: &CalArgs,
     today: CivilDate,
     style: CellStyle,
+    color: Color,
     week_start: i32,
     out: &mut String,
 ) -> Result<(), CalError> {
@@ -147,7 +161,14 @@ fn run_lunar(
         if index > 0 {
             out.push('\n');
         }
-        let grid = Grid::lunar(lunar_month_title(month), *month, week_start, style)?;
+        let grid = Grid::lunar(
+            lunar_month_title(month),
+            *month,
+            week_start,
+            style,
+            today,
+            color,
+        )?;
         grid.render(out);
     }
     Ok(())

@@ -8,7 +8,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use lunar_rs::solar_util;
-use lunar_rs::{Lunar, LunarMonth, LunarYear, Solar};
+use lunar_rs::{Holiday, Lunar, LunarMonth, LunarYear, Solar};
 
 use crate::civil::CivilDate;
 
@@ -45,6 +45,16 @@ pub enum CalError {
     UnparsableDate { input: String },
     /// The current local date is outside the supported window.
     TodayOutOfRange,
+    /// A lunar day that does not exist in the requested lunar month.
+    LunarDayOutOfRange {
+        year: i32,
+        month: i32,
+        day: i32,
+        max: i32,
+    },
+    /// A lunar month number outside `1..=12`, the leap form included
+    /// (`-4` is the leap fourth month), or zero.
+    LunarMonthOutOfRange { month: i32 },
 }
 
 impl CalError {
@@ -66,6 +76,20 @@ impl CalError {
                 format!("农历 {year} 年没有{}月", m_abs(*month))
             }
             Self::NoLeapMonth { year } => format!("农历 {year} 年没有闰月"),
+            Self::LunarDayOutOfRange {
+                year,
+                month,
+                day,
+                max,
+            } => {
+                format!(
+                    "农历 {year} 年{}没有第 {day} 天 (该月只有 {max} 天)",
+                    m_abs(*month)
+                )
+            }
+            Self::LunarMonthOutOfRange { month } => {
+                format!("农历月份 {month} 非法 (应为 1–12，闰月为负数)")
+            }
             Self::UnparsableDate { input } => format!("无法解析的日期: {input}"),
             Self::TodayOutOfRange => "当前日期超出支持范围 (1–9999 年)".to_string(),
         }
@@ -129,6 +153,52 @@ pub fn solar(year: i32, month: i32, day: i32) -> Result<Solar, CalError> {
         lunar_rs::LunarError::GregorianGap { .. } => CalError::YearMissing { year },
         _ => CalError::NonexistentDate { year, month, day },
     })
+}
+
+/// Whether `month` is a lunar month number: `1..=12`, a negative number
+/// standing for the leap month of that ordinal.
+pub fn check_lunar_month(month: i32) -> Result<(), CalError> {
+    match month.checked_abs() {
+        Some(1..=12) => Ok(()),
+        _ => Err(CalError::LunarMonthOutOfRange { month }),
+    }
+}
+
+/// The civil day a lunar year / month / day falls on.
+///
+/// `Lunar::from_ymd` walks the lunar-new-year window, so a leap month of
+/// another year can be handed back; the result is checked to belong to
+/// `year` before it is returned. A month absent from that year is
+/// [`CalError::NoSuchLunarMonth`] (a leap month asked for without `-R` being
+/// meaningful, an ordinary one simply out of range) and a day past the end of
+/// the month is [`CalError::LunarDayOutOfRange`].
+pub fn solar_from_lunar(year: i32, month: i32, day: i32) -> Result<Solar, CalError> {
+    check_year(year)?;
+    check_lunar_month(month)?;
+    let lunar_year = LunarYear::from_year(year);
+    let Some(lunar_month) = lunar_year_month(&lunar_year, month) else {
+        return Err(CalError::NoSuchLunarMonth { year, month });
+    };
+    let max = lunar_month.get_day_count();
+    if day < 1 || day > max {
+        return Err(CalError::LunarDayOutOfRange {
+            year,
+            month,
+            day,
+            max,
+        });
+    }
+    let lunar = Lunar::from_ymd(year, month, day).map_err(|_| CalError::LunarDayOutOfRange {
+        year,
+        month,
+        day,
+        max,
+    })?;
+    let solar = lunar.solar();
+    match solar.year() == year {
+        true => Ok(solar),
+        false => Err(CalError::NoSuchLunarMonth { year, month }),
+    }
 }
 
 /// Chinese lunar month name: `正月`, `闰四月`, `腊月`.
@@ -236,6 +306,37 @@ fn festival_rank(name: &str) -> usize {
         .iter()
         .position(|principal| *principal == name)
         .unwrap_or(usize::MAX)
+}
+
+/// The statutory calendar entry for a civil day, if it has one.
+///
+/// This is the 法定节假日 table the State Council publishes each year: a day
+/// off (`is_work` false) and the 调休 workdays it moves onto weekends
+/// (`is_work` true). It is *not* the traditional festival list —
+/// [`traditional_festivals`] already has that — and it is not derived from the
+/// weekday either, since a 调休 Saturday is exactly the day the two disagree.
+/// The engine only carries the years it was given, so a day outside them has
+/// no entry and is drawn as an ordinary day.
+pub fn legal_holiday(solar: &Solar) -> Option<Holiday> {
+    lunar_rs::holiday_util::get_holiday_by_ymd(solar.year(), solar.month(), solar.day())
+}
+
+/// One `法定: …` line of the `date` profile, or `None` for an ordinary day.
+///
+/// The line carries both halves of the statutory entry — the name and
+/// whether the day is off or 调休上班 — because that is the one thing a reader
+/// of a day profile has no other way to learn, and the 调休 half in
+/// particular contradicts the weekday the profile prints above it.
+pub fn legal_holiday_line(solar: &Solar) -> Option<String> {
+    let holiday = legal_holiday(solar)?;
+    Some(format!(
+        "法定: {}{}",
+        holiday.get_name(),
+        match holiday.is_work() {
+            true => " 调休上班",
+            false => " 放假",
+        }
+    ))
 }
 
 /// A whole lunar year, for `cal -L <year>`.

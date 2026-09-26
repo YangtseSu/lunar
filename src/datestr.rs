@@ -9,12 +9,26 @@
 //! * slashes: `2026/09/07`, `09/07/2026` (month/day/year)
 //! * relative: `+3 days`, `-2 weeks`, `2 days ago`, `1 fortnight`, `90 minutes`
 //! * weekday names: `monday`, `next friday`, `last friday`
+//! * **lunar** (with `date -l`): `2026-07-15`, `20260715`, `2026/7/15`
 //!
 //! Everything is anchored to a reference day (today by default), exactly like
 //! `date -d`. Only the calendar day is kept from the reference; the CLI is a
 //! calendar tool and has no time-of-day display.
+//!
+//! **A lunar date and a civil date share one grammar.** The three absolute
+//! shapes are parsed once, into a plain year / month / day triple, and the
+//! calendar the triple is *resolved against* is the only difference: with
+//! `-l` the triple is a 农历 date and goes through
+//! [`crate::calendar::solar_from_lunar`], without it a 公历 date and goes
+//! through [`crate::calendar::solar`]. That is what makes `-d 2026-07-15` and
+//! `-l -d 2026-07-15` behave the same way, differing only in the answer.
+//!
+//! Only the absolute shapes have a lunar reading. A keyword, an `@epoch`, a
+//! weekday and a relative offset are all statements about *days*, not about a
+//! date written in one calendar or the other, so they resolve against the
+//! reference exactly as they do without `-l`.
 
-use crate::calendar::{CalError, MAX_YEAR, MIN_YEAR};
+use crate::calendar::{self, CalError, MAX_YEAR, MIN_YEAR};
 use crate::civil::{self, CivilDate};
 
 /// Weekday names accepted in `-d` strings.
@@ -49,8 +63,23 @@ fn invalid(input: &str) -> CalError {
     }
 }
 
+/// Which calendar the absolute shapes of a `-d` string are written in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Calendar {
+    /// 公历, the default.
+    Civil,
+    /// 农历, from `date -l`.
+    Lunar {
+        /// `-R`: the month is the leap one.
+        leap: bool,
+    },
+}
+
 /// Parses `input` relative to `reference`.
-pub fn parse(input: &str, reference: CivilDate) -> Result<CivilDate, CalError> {
+///
+/// `calendar` only changes the reading of the absolute shapes; see the module
+/// doc for what it deliberately leaves alone.
+pub fn parse(input: &str, reference: CivilDate, calendar: Calendar) -> Result<CivilDate, CalError> {
     let text = input.trim();
     if text.is_empty() {
         return Err(invalid(input));
@@ -63,13 +92,29 @@ pub fn parse(input: &str, reference: CivilDate) -> Result<CivilDate, CalError> {
     if let Some(rest) = lower.strip_prefix('@') {
         return parse_epoch(rest, input);
     }
-    if let Some(result) = parse_absolute(text, &lower, reference)? {
+    if let Some(result) = parse_absolute(text, &lower, reference, calendar)? {
         return Ok(result);
     }
     if let Some(result) = parse_weekday(&lower, reference)? {
         return Ok(result);
     }
     parse_relative(&lower, reference, input)
+}
+
+/// Reads a year / month / day given as three separate integers — the
+/// positional form of `lunar date`.
+///
+/// The same [`Calendar`] reading applies as for a `-d` string, so
+/// `date -l 2026 7 15` and `date -l -d 2026-07-15` are the same day. The
+/// components are read as numbers rather than as text, so a month or a day may
+/// be written unpadded, exactly as before.
+pub fn from_parts(
+    year: i32,
+    month: i32,
+    day: i32,
+    calendar: Calendar,
+) -> Result<CivilDate, CalError> {
+    resolve(Parts { year, month, day }, calendar)
 }
 
 /// `now`, `today`, `tomorrow`, `yesterday`.
@@ -92,29 +137,42 @@ fn parse_epoch(rest: &str, input: &str) -> Result<CivilDate, CalError> {
     validate(date, input)
 }
 
+/// A year / month / day triple, as written, before it is read in a calendar.
+struct Parts {
+    year: i32,
+    month: i32,
+    day: i32,
+}
+
 /// Absolute dates: ISO 8601, slash forms, bare year, and a trailing time of
 /// day which only matters for zone shifts.
+///
+/// The grammar is read once and is the same in both calendars; [`resolve`]
+/// decides what the triple means. A time-of-day suffix belongs to the civil
+/// reading — shifting a lunar date across a time zone has no meaning here —
+/// so `-l` rejects one rather than silently ignoring it.
 fn parse_absolute(
     text: &str,
     lower: &str,
     reference: CivilDate,
+    calendar: Calendar,
 ) -> Result<Option<CivilDate>, CalError> {
     let bytes = text.as_bytes();
 
     let input = text;
     // YYYYMMDD, optionally followed by a time part: 20260907T1530
     if bytes.len() >= 8 && bytes[..8].iter().all(u8::is_ascii_digit) {
-        let date = CivilDate::new(
-            number(&text[0..4], input)?,
-            number(&text[4..6], input)?,
-            number(&text[6..8], input)?,
-        );
+        let parts = Parts {
+            year: number(&text[0..4], input)?,
+            month: number(&text[4..6], input)?,
+            day: number(&text[6..8], input)?,
+        };
         let rest = lower.strip_prefix(&lower[..8]);
-        return finish(date, rest.unwrap_or(""), input).map(Some);
+        return finish(parts, rest.unwrap_or(""), calendar, input).map(Some);
     }
 
-    // A dashed date whose first field is a one- to three-digit year, e.g.
-    // `1-01-01` or `999-12-31`.
+    // A date whose first field is a one- to three-digit year, e.g. `1-01-01`
+    // or `999-12-31`.
     if bytes.len() >= 6
         && bytes
             .iter()
@@ -125,40 +183,48 @@ fn parse_absolute(
             let sep = bytes[first];
             let fields: Vec<&str> = text.split(sep as char).collect();
             if fields.len() == 3 {
-                let date = CivilDate::new(
-                    number(fields[0], input)?,
-                    number(fields[1], input)?,
-                    number(fields[2], input)?,
-                );
-                return finish(date, "", input).map(Some);
+                let parts = Parts {
+                    year: number(fields[0], input)?,
+                    month: number(fields[1], input)?,
+                    day: number(fields[2], input)?,
+                };
+                return finish(parts, "", calendar, input).map(Some);
             }
         }
     }
 
     // YYYY-MM-DD / YYYY/MM/DD, with the same separator in both positions.
     if bytes.len() >= 10 && (bytes[4] == b'-' || bytes[4] == b'/') && bytes[7] == bytes[4] {
-        let date = CivilDate::new(
-            number(&text[0..4], input)?,
-            number(&text[5..7], input)?,
-            number(&text[8..10], input)?,
-        );
-        return finish(date, &lower[10..], input).map(Some);
+        let parts = Parts {
+            year: number(&text[0..4], input)?,
+            month: number(&text[5..7], input)?,
+            day: number(&text[8..10], input)?,
+        };
+        return finish(parts, &lower[10..], calendar, input).map(Some);
     }
 
     // MM/DD/YYYY, the US order used by date(1).
     if bytes.len() >= 10 && bytes[2] == b'/' && bytes[5] == b'/' {
-        let date = CivilDate::new(
-            number(&text[6..10], input)?,
-            number(&text[0..2], input)?,
-            number(&text[3..5], input)?,
-        );
-        return finish(date, &lower[10..], input).map(Some);
+        let parts = Parts {
+            year: number(&text[6..10], input)?,
+            month: number(&text[0..2], input)?,
+            day: number(&text[3..5], input)?,
+        };
+        return finish(parts, &lower[10..], calendar, input).map(Some);
     }
 
-    // A bare year keeps today's month and day.
+    // A bare year keeps the reference's month and day, read in the same
+    // calendar: `-l -d 2026` is 农历 2026 年的同月同日.
     if bytes.len() == 4 && bytes.iter().all(u8::is_ascii_digit) {
-        let date = CivilDate::new(number(text, input)?, reference.month, reference.day);
-        return validate(date, input).map(Some);
+        let year = number(text, input)?;
+        let (month, day) = match calendar {
+            Calendar::Civil => (reference.month, reference.day),
+            Calendar::Lunar { .. } => {
+                let lunar = reference.to_solar()?.lunar();
+                (lunar.month(), lunar.day())
+            }
+        };
+        return resolve(Parts { year, month, day }, calendar).map(Some);
     }
 
     // A bare time of day applies to today: 15:30, 15:30:45
@@ -170,12 +236,36 @@ fn parse_absolute(
     Ok(None)
 }
 
+/// Reads a parsed triple in the calendar `-l` selected.
+fn resolve(parts: Parts, calendar: Calendar) -> Result<CivilDate, CalError> {
+    let Parts { year, month, day } = parts;
+    let solar = match calendar {
+        Calendar::Civil => calendar::solar(year, month, day)?,
+        // A leap month is named negatively, as `cal -L -R` names it.
+        Calendar::Lunar { leap: true } => calendar::solar_from_lunar(year, -month.abs(), day)?,
+        Calendar::Lunar { leap: false } => calendar::solar_from_lunar(year, month, day)?,
+    };
+    Ok(CivilDate::new(solar.year(), solar.month(), solar.day()))
+}
+
 /// Applies an optional trailing time/zone to an absolute date.
-fn finish(date: CivilDate, suffix: &str, input: &str) -> Result<CivilDate, CalError> {
+fn finish(
+    parts: Parts,
+    suffix: &str,
+    calendar: Calendar,
+    input: &str,
+) -> Result<CivilDate, CalError> {
     let suffix = suffix.trim_start_matches(['t', ' ']);
     if suffix.is_empty() {
-        return validate(date, input);
+        return resolve(parts, calendar);
     }
+    // A time of day belongs to the civil grammar; under `-l` it is rejected
+    // rather than dropped, so `-l -d 2026-07-15T09:00` never looks like it
+    // honoured the time.
+    if calendar != Calendar::Civil {
+        return Err(invalid(input));
+    }
+    let date = resolve(parts, calendar)?;
     let (clock, zone) = split_zone(suffix);
     let time = parse_clock(clock).ok_or_else(|| invalid(input))?;
     match zone {
