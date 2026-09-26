@@ -1884,18 +1884,11 @@ fn a_bare_year_prints_the_whole_year() {
     assert!(lunar_year.starts_with("农历 庚子年 正月\n"));
 }
 
-#[test]
-fn month_spans_are_supported() {
-    let span = run(&["cal", "2026", "9", "-n", "3"]);
-    let titles: Vec<&str> = span.lines().filter(|line| line.ends_with('月')).collect();
-    assert_eq!(titles, vec!["2026年9月", "2026年10月", "2026年11月"]);
-}
-
 /// A span of zero months is a mistake, not a request for one month.
 ///
-/// `month_count` was `months.max(1)`, so `cal 2026 9 -n 0` printed a month
-/// and exited 0 — the only out-of-range argument in the tool that was repaired
-/// instead of reported. `-n` is now bounded at parse time, so the refusal
+/// The span count used to be `months.max(1)`, so `cal 2026 9 -n 0` printed a
+/// month and exited 0 — the only out-of-range argument in the tool that was
+/// repaired instead of reported. `-n` is bounded at parse time, so the refusal
 /// comes with the value that was wrong rather than after the fact.
 #[test]
 fn a_non_positive_month_span_is_refused() {
@@ -1925,68 +1918,275 @@ fn a_non_positive_month_span_is_refused() {
         1
     );
 }
+/// The grid titles of a `-L` run, in order.
+fn lunar_titles(output: &str) -> Vec<String> {
+    output
+        .lines()
+        .filter(|line| line.starts_with("农历"))
+        .map(str::to_string)
+        .collect()
+}
 
-/// `-3` / `-n N` widen a `-L` request as they do a civil one.
+/// The grid titles of a civil run, in order.
+fn civil_titles(output: &str) -> Vec<String> {
+    output
+        .lines()
+        .filter(|line| line.ends_with('月'))
+        .map(str::to_string)
+        .collect()
+}
+
+/// `-3` centres on the month named and `-n N` starts at it.
 ///
 /// `select_lunar_months` returned the named month as soon as it saw two
 /// positionals, so the span flags were never read: `cal -L 2026 7 -3` printed
-/// one month where `cal 2026 7 -3` printed three. The named month is now the
-/// centre of the span, kept at full length at either end of the year.
+/// one month where `cal 2026 7 -3` printed three. Centring was then the only
+/// reading either flag had — `-n` centred too — and a window that ran off the
+/// end of the year was shifted back to keep its length, so `-3` from 正月
+/// printed 正月, 二月, 三月 instead of the 腊月 before it. The two flags now
+/// read the way `cal(1)` reads them, and a window is a slice of the lunar
+/// month sequence rather than a span clamped to one year.
 #[test]
-fn a_lunar_month_span_centres_on_the_named_month() {
-    fn titles(output: &str) -> Vec<&str> {
-        output
-            .lines()
-            .filter(|line| line.starts_with("农历"))
-            .collect()
-    }
+fn a_lunar_span_centres_or_starts_as_the_flag_says() {
     // Centred: the named month with one either side.
     assert_eq!(
-        titles(&run(&["cal", "-L", "2026", "7", "-3"])),
+        lunar_titles(&run(&["cal", "-L", "2026", "7", "-3"])),
         vec!["农历 丙午年 六月", "农历 丙午年 七月", "农历 丙午年 八月"]
     );
     // The flag that named one month still names one month.
     assert_eq!(
-        titles(&run(&["cal", "-L", "2026", "7"])),
+        lunar_titles(&run(&["cal", "-L", "2026", "7"])),
         vec!["农历 丙午年 七月"]
     );
-    // `-n N` reads the same way.
+    // `-n N` starts at the month named rather than centring on it.
     assert_eq!(
-        titles(&run(&["cal", "-L", "2026", "7", "-n", "5"])).len(),
-        5
-    );
-    // A span at either end of the year keeps its full length: the window is
-    // shifted back, not cut short. It used to be clipped, and
-    // `a_lunar_month_span_centres_on_the_named_month` pinned the clipped
-    // length of 2 as if it were intended.
-    assert_eq!(
-        titles(&run(&["cal", "-L", "2026", "1", "-3"])),
-        vec!["农历 丙午年 正月", "农历 丙午年 二月", "农历 丙午年 三月"]
+        lunar_titles(&run(&["cal", "-L", "2026", "7", "-n", "3"])),
+        vec!["农历 丙午年 七月", "农历 丙午年 八月", "农历 丙午年 九月"]
     );
     assert_eq!(
-        titles(&run(&["cal", "-L", "2026", "12", "-3"])),
-        vec!["农历 丙午年 十月", "农历 丙午年 冬月", "农历 丙午年 腊月"]
+        lunar_titles(&run(&["cal", "-L", "2026", "7", "-n", "5"])),
+        vec![
+            "农历 丙午年 七月",
+            "农历 丙午年 八月",
+            "农历 丙午年 九月",
+            "农历 丙午年 十月",
+            "农历 丙午年 冬月",
+        ]
     );
-    // A span never comes back shorter than it was, at either end and in a
-    // thirteen-month year alike: `-y` asks for twelve and used to deliver
-    // seven from 十二月 and eleven from 七月.
-    for (year, month) in [("2020", "7"), ("2026", "7"), ("2026", "12"), ("2020", "4")] {
-        assert_eq!(
-            titles(&run(&["cal", "-L", year, month, "-y"])).len(),
-            12,
-            "`cal -L {year} {month} -y` asks for twelve months"
-        );
-    }
-    // A span longer than the year yields the year, leap month included.
+    // A centred window at the start of a year takes the 腊月 before it, and
+    // at the end it runs into the next 正月 — the length is kept either way,
+    // which is what the old shift-back could not do at both ends at once.
     assert_eq!(
-        titles(&run(&["cal", "-L", "2020", "7", "-n", "20"])).len(),
-        13
+        lunar_titles(&run(&["cal", "-L", "2026", "1", "-3"])),
+        vec!["农历 乙巳年 腊月", "农历 丙午年 正月", "农历 丙午年 二月"]
+    );
+    assert_eq!(
+        lunar_titles(&run(&["cal", "-L", "2026", "12", "-3"])),
+        vec!["农历 丙午年 冬月", "农历 丙午年 腊月", "农历 丁未年 正月"]
     );
     // `-R` centres on the leap month when one exists.
-    assert!(run(&["cal", "-L", "2020", "4", "-R", "-3"]).contains("闰四月"));
-    // A bare lunar year is still the whole year, whatever the span flags say.
-    assert_eq!(titles(&run(&["cal", "-L", "2026"])).len(), 12);
-    assert_eq!(titles(&run(&["cal", "-L", "2026", "-3"])).len(), 12);
+    assert_eq!(
+        lunar_titles(&run(&["cal", "-L", "2020", "4", "-R", "-3"])),
+        vec!["农历 庚子年 四月", "农历 庚子年 闰四月", "农历 庚子年 五月"]
+    );
+    // A span longer than the year crosses it rather than stopping at the
+    // year's end: 七月 庚子年 through 二月 壬寅年 is twenty consecutive months,
+    // which is exactly what `-n 20` asked for.
+    let long = lunar_titles(&run(&["cal", "-L", "2020", "7", "-n", "20"]));
+    assert_eq!(long.len(), 20);
+    assert_eq!(long[0], "农历 庚子年 七月");
+    assert_eq!(long[19], "农历 壬寅年 二月");
+}
+
+/// A lunar span walks the continuous month sequence, across the new year.
+///
+/// 腊月 always begins in the following January, so the sequence's own
+/// successor to 丙午年 腊月 is 丁未年 正月. The old view was bounded by the
+/// year it names and shifted a window back to keep its length, so a span
+/// could never show two ganzhi years — and the title carries the year, so
+/// crossing is readable rather than ambiguous.
+#[test]
+fn the_lunar_span_crosses_the_lunar_new_year() {
+    assert_eq!(
+        lunar_titles(&run(&["cal", "-L", "2026", "12", "-n", "3"])),
+        vec!["农历 丙午年 腊月", "农历 丁未年 正月", "农历 丁未年 二月"]
+    );
+    // Centred on 正月, the window is the 腊月 that belongs to the *previous*
+    // lunar year, which is the whole point: the sequence is the calendar, not
+    // the year the argument named.
+    assert_eq!(
+        lunar_titles(&run(&["cal", "-L", "2026", "1", "-3"])),
+        vec!["农历 乙巳年 腊月", "农历 丙午年 正月", "农历 丙午年 二月"]
+    );
+}
+
+/// A missing month comes from the reference day, the way `cal(1)`'s does.
+///
+/// `cal 2026` used to start in January whatever today was, and `cal 2026 -3`
+/// centred on January. `cal(1)` fills the month from today: `cal -3 2025`
+/// prints 八月, 九月, 十月 2025. The reference day is not an input the suite
+/// can pin, so the test asks the binary which month it is and checks the
+/// window against that.
+#[test]
+fn the_missing_month_comes_from_today() {
+    let today = run(&["date", "-d", "today", "-f", "%Y %m"]);
+    let (year, month) = today.split_once(' ').expect("a year and a month");
+    let month: i32 = month.parse().expect("a month number");
+
+    // A bare year with a span flag is that year, centred on or started at
+    // today's month in it.
+    let titles = civil_titles(&run(&["cal", year, "-3"]));
+    assert_eq!(titles.len(), 3, "`cal {year} -3` prints three months");
+    assert!(
+        titles.contains(&format!("{year}年{month}月")),
+        "`cal {year} -3` contains the month of {today}: {titles:?}"
+    );
+    // The other two are the months either side of it: the titles are
+    // consecutive numbers, which is checkable without knowing the month, and
+    // it holds across a year boundary.
+    let numbers: Vec<i32> = titles
+        .iter()
+        .map(|title| {
+            title
+                .trim_start_matches(|c: char| c.is_ascii_digit())
+                .trim_matches(|c: char| c == '年')
+                .trim_end_matches('月')
+                .parse()
+                .expect("a month number")
+        })
+        .collect();
+    assert!(
+        numbers.windows(2).all(|pair| pair[1] == pair[0] % 12 + 1),
+        "three consecutive months across a year boundary: {numbers:?}"
+    );
+    // No positionals at all: the same window, in today's own year.
+    assert_eq!(civil_titles(&run(&["cal", "-3"])), titles);
+    // A whole year ignores the month and is the twelve months of the year
+    // named — `cal -y 2026` prints 2026, not twelve months from September.
+    let whole = civil_titles(&run(&["cal", year, "-y"]));
+    assert_eq!(whole.len(), 12, "`cal {year} -y` is twelve months");
+    assert!(whole[0].starts_with(&format!("{year}年1月")));
+    // And the lunar view reads the same way, on today's own lunar month.
+    let lunar = lunar_titles(&run(&["cal", "-L", "-3"]));
+    assert_eq!(lunar.len(), 3, "`cal -L -3` prints three lunar months");
+    let this_lunar_month = run(&["date", "-d", "today", "-f", "%G年 %M"]);
+    assert!(
+        lunar.iter().any(|title| title.contains(&this_lunar_month)),
+        "`cal -L -3` contains {this_lunar_month}: {lunar:?}"
+    );
+}
+
+/// A window that runs off the supported range is reported, not clipped.
+///
+/// The window, not the month, is what reached past the end: 农历 9999 年腊月
+/// is itself a month the engine has, and its days cross into 10000 as well —
+/// but the *anchor* here is one the window leaves by two months, which is
+/// what the range error names. A civil `9999 12 -n 3` is the same shape.
+#[test]
+fn a_span_off_the_range_end_is_reported() {
+    for args in [
+        ["cal", "-L", "9999", "12", "-n", "3"].as_slice(),
+        ["cal", "-L", "9999", "12", "-3"].as_slice(),
+        ["cal", "9999", "12", "-n", "3"].as_slice(),
+        ["cal", "9999", "12", "-3"].as_slice(),
+    ] {
+        assert!(
+            run_failing(args).contains("年份 10000 超出支持范围"),
+            "`lunar {}` names the year the window reached",
+            args.join(" ")
+        );
+    }
+    // The low end is the same shape: a window centred on the first year needs
+    // the year before it, which is not one the engine serves.
+    for args in [
+        ["cal", "-L", "1", "1", "-3"].as_slice(),
+        ["cal", "1", "1", "-3"].as_slice(),
+    ] {
+        assert!(
+            run_failing(args).contains("年份 0 超出支持范围"),
+            "`lunar {}` names the year the window reached",
+            args.join(" ")
+        );
+    }
+}
+
+/// The span flags mean what `cal(1)`'s mean.
+///
+/// `cal(1)` (util-linux 2.42.4) reads `-3` as the month named and its
+/// neighbours, `-n N` as the next `N` months from it, and `-y` as the whole
+/// year — every one of them crossing the year boundary freely, and a missing
+/// month filled in from today. This tool read `-3` as walking forward, `-n`
+/// as centring, and `-y` as twelve months from the month named.
+#[test]
+fn the_span_flags_match_cal_one() {
+    // `cal -3 9 2026` — centred.
+    assert_eq!(
+        civil_titles(&run(&["cal", "2026", "7", "-3"])),
+        vec!["2026年6月", "2026年7月", "2026年8月"]
+    );
+    assert_eq!(
+        civil_titles(&run(&["cal", "2026", "9", "-3"])),
+        vec!["2026年8月", "2026年9月", "2026年10月"]
+    );
+    // A window that crosses the year boundary is a sequence of months, not a
+    // window clamped to the year: `cal -3 12 2026` is 十一月, 十二月, 一月.
+    assert_eq!(
+        civil_titles(&run(&["cal", "2026", "12", "-3"])),
+        vec!["2026年11月", "2026年12月", "2027年1月"]
+    );
+    assert_eq!(
+        civil_titles(&run(&["cal", "2026", "1", "-3"])),
+        vec!["2025年12月", "2026年1月", "2026年2月"]
+    );
+    // `cal -n 3 9 2026` — starting at the month named.
+    assert_eq!(
+        civil_titles(&run(&["cal", "2026", "7", "-n", "3"])),
+        vec!["2026年7月", "2026年8月", "2026年9月"]
+    );
+    assert_eq!(
+        civil_titles(&run(&["cal", "2026", "12", "-n", "3"])),
+        vec!["2026年12月", "2027年1月", "2027年2月"]
+    );
+    // `cal -y 9 2026` — the whole year, whatever month is named.
+    for args in [
+        ["cal", "2026", "9", "-y"].as_slice(),
+        ["cal", "2026", "1", "-y"].as_slice(),
+        ["cal", "2026", "12", "-y"].as_slice(),
+        ["cal", "2026", "-y"].as_slice(),
+    ] {
+        let titles = civil_titles(&run(args));
+        assert_eq!(
+            titles,
+            (1..=12)
+                .map(|month| format!("2026年{month}月"))
+                .collect::<Vec<String>>(),
+            "`lunar {}` is the whole of 2026",
+            args.join(" ")
+        );
+    }
+    // A bare year is the whole year too, with or without the flag.
+    assert_eq!(
+        civil_titles(&run(&["cal", "2026"])),
+        civil_titles(&run(&["cal", "2026", "-y"]))
+    );
+    // `-y` on a lunar year is that lunar year, leap month included, and the
+    // month named with it is not a second answer.
+    assert_eq!(lunar_titles(&run(&["cal", "-L", "2020", "-y"])).len(), 13);
+    assert_eq!(
+        lunar_titles(&run(&["cal", "-L", "2020", "7", "-y"])).len(),
+        13
+    );
+    assert_eq!(
+        lunar_titles(&run(&["cal", "-L", "2020", "7", "-y"])),
+        lunar_titles(&run(&["cal", "-L", "2020"]))
+    );
+    assert!(run(&["cal", "-L", "2020", "7", "-y"]).contains("闰四月"));
+    // `-n 1` is one month, and a named month alone is one month.
+    assert_eq!(
+        civil_titles(&run(&["cal", "2026", "9", "-n", "1"])),
+        vec!["2026年9月"]
+    );
+    assert_eq!(civil_titles(&run(&["cal", "2026", "9"])), vec!["2026年9月"]);
 }
 
 #[test]

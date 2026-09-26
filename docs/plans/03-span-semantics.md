@@ -1,6 +1,6 @@
 # 计划 03 — `cal` 跨度语义对齐 cal(1)：`-3` 居中、`-n N` 起于、`-y` 整年
 
-Status: 待实施 · Priority: P1 · Depends: 01（先让越界可预测）、02（同文件旗标处理）
+Status: 已实施 · Priority: P1 · Depends: 01（先让越界可预测）、02（同文件旗标处理）
 
 ## 现象（本机 util-linux 2.42.3 `cal` 为基准，2026-09-26）
 

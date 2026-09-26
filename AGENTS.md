@@ -195,6 +195,13 @@ Invariants, in the order they are easiest to break:
   `--help-format` must list every token; the suite checks it does.
 - **Adding a `cal` flag:** map it to `CellStyle` in `cal::run`, the single seam;
   do not grow a second configuration path.
+- **Span semantics are `cal(1)`'s, and `span_of` is the one place they live.**
+  `-3` centres on the month named, `-n N` starts at it, `-y` is the year it
+  belongs to, and a month the arguments leave out is today's (`-L`: today's
+  lunar month). Both views slice one continuous month sequence and cross year
+  boundaries freely — the lunar one through `lunar_sequence`, which loads
+  neighbouring lunar years. A window that leaves 1–9999 is reported, never
+  clipped.
 
 ## Testing & QA
 
@@ -266,8 +273,6 @@ are judged against.
 All verified; each is a plan, not intended behaviour. Fix deliberately; do not
 silently paper over one as a side effect of unrelated work.
 
-- `cal` span flags do not match `cal(1)`: `-3` walks forward, `-n N` centres,
-  `-y` counts 12 months from the named month (`docs/plans/03`).
 - Long digit runs are claimed by the compact `YYYYMMDD` form, so
   `date -d "2147483647 days"` reports a month instead of an offset
   (`docs/plans/04`).

@@ -270,20 +270,26 @@ $ lunar cal -L 2026 7
 | `-L`, `--lunar` | show lunar months instead of civil months |
 | `-R`, `--leap` | with `-L`, select the leap month (refused without `-L`) |
 | `-s`, `--sunday` / `-m`, `--monday` | first day of the week (Monday by default) |
-| `-y`, `--year` | 12 months starting at the month named |
-| `-3`, `--three` / `-n N`, `--months N` | `N` consecutive months (`N` ≥ 1), civil view starting at the month named, lunar view centred on it |
+| `-y`, `--year` | the whole year: 12 civil months, or the whole lunar year with `-L` |
+| `-3`, `--three` | the month named and the one before and after it |
+| `-n N`, `--months N` | the next `N` months (`N` ≥ 1), starting at the month named |
 | `--number` | lunar day as digits instead of 初一/廿六 |
 | `--no-month-name` | never replace 初一 with the month name |
 | `--no-festival` | never show festivals |
 | `--no-holiday` | never mark the statutory calendar (放假 / 调休) |
 | `--color[=WHEN]` / `--no-color` | `auto` (only when stdout is a terminal) / `always` / `never`; `--no-color` is `--color=never`. Each overrides the other, so the one written last decides. The value needs `=`, as in `--color=always` |
 
-The civil view walks forward from the month named, across year boundaries
-(`cal 2026 12 -n 3` prints 2026年12月, 2027年1月, 2027年2月). The lunar view is
-bounded by the lunar year it names: a span is centred on the named month and
-shifted back to keep its length at either end, so three months centred on 十二月
-are 十月, 冬月, 腊月. A span at least as long as the year is the year. These span
-semantics differ from `cal(1)`; aligning them is tracked in `docs/plans`.
+The span flags read as `cal(1)` reads them, and every window crosses a year
+boundary freely: `-3` centres (`cal 2026 12 -3` prints 2026年11月, 2026年12月 and
+2027年1月), `-n N` starts at the month named, and `-y` is the year the month
+belongs to — `cal 2026 9 -y` prints the twelve months of 2026, not twelve months
+from September. A month the arguments leave out is the month the reference day
+falls in, so `cal -3` is centred on today and `cal 2026 -3` is centred on today's
+month in 2026. A month without a flag is the whole year, and with none at all it
+is the current month. The lunar view walks the continuous lunar month sequence,
+so a window crosses the lunar new year too: `cal -L 2026 12 -n 3` prints
+丙午年 腊月, 丁未年 正月, 丁未年 二月, each grid titled with its own ganzhi year.
+A window that reaches past 1–9999 is reported, never clipped.
 
 ## Supported range
 
@@ -317,10 +323,6 @@ not features, and are tracked as implementation plans in [`docs/plans`](docs/pla
   (`docs/plans/06`);
 - a long run of digits is claimed by the compact `YYYYMMDD` form
   (`date -d "2147483647 days"` reports a month, `docs/plans/04`);
-- `lunar cal` span flags do not match `cal(1)`: `-3` walks forward instead of
-  centring, `-n N` centres instead of starting at the named month, and `-y`
-  shows 12 months from the named month instead of the named year
-  (`docs/plans/03`);
 
 ## Implementation notes
 

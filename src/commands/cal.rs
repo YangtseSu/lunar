@@ -6,19 +6,18 @@
 //! * one argument → a whole year
 //! * two arguments → `年 月`
 //! * `-L` switches from civil months to lunar months, `-R` picks the leap month
-//! * `-s` / `-m` pick the first column (Monday is the default), `-y`, `-3`, `-n N`
-//!   extend the range
+//! * `-s` / `-m` pick the first column (Monday is the default); `-y` prints
+//!   the whole year, `-3` the month named and its neighbours, `-n N` the next
+//!   `N` months — the readings `cal(1)` gives them
 //! * `--number`, `--no-month-name`, `--no-festival`, `--no-holiday` change cell
 //!   content
 //! * `--color[=auto|always|never]` / `--no-color` override the automatic SGR of
 //!   the reference day, the 法定节假日 and the 调休 marks; the two override
 //!   each other, so the one written last decides
 
-use std::sync::Arc;
+use lunar_rs::{Lunar, LunarMonth};
 
-use lunar_rs::{Lunar, LunarMonth, LunarYear};
-
-use crate::calendar::{self, CalError, MAX_YEAR};
+use crate::calendar::{self, CalError};
 use crate::calgrid::{self, Grid};
 use crate::cell::CellStyle;
 use crate::civil::CivilDate;
@@ -35,11 +34,11 @@ pub struct CalArgs {
     pub leap: bool,
     /// `-s`: Sunday starts the week.
     pub sunday: bool,
-    /// `-y`: whole year.
+    /// `-y`: the whole year.
     pub year: bool,
-    /// `-3`: three consecutive months.
+    /// `-3`: the month named and the one before and after it.
     pub three: bool,
-    /// `-n N`: N consecutive months.
+    /// `-n N`: the next `N` months, starting at the month named.
     pub months: Option<i32>,
     /// `--number`.
     pub number: bool,
@@ -72,6 +71,67 @@ pub fn run(args: &CalArgs, today: CivilDate, out: &mut String) -> Result<(), Cal
     }
 }
 
+/// How many months a request prints, and where its window starts.
+///
+/// The readings are `cal(1)`'s: `-3` centres on the month named, `-n N` starts
+/// at it, `-y` is the whole year. A month the arguments leave out is the one
+/// the reference day falls in, which is how a bare `cal` reaches the current
+/// month and `cal 2026` the year the reference day is in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Span {
+    /// The twelve months of the year named — a lunar year's thirteen included.
+    WholeYear,
+    /// `count` months with the month named in the middle.
+    Centred(i32),
+    /// `count` months from the month named forwards.
+    Forward(i32),
+    /// The month named, alone.
+    Single,
+}
+
+impl Span {
+    /// The months a span takes out of a continuous month sequence, as
+    /// `(offset of the first from the month named, how many)`.
+    ///
+    /// `None` is the whole year: it is the named year rather than a window
+    /// through it, and a lunar year holds thirteen months where a civil one
+    /// holds twelve, so the two views answer it from that year's own months.
+    fn window(self) -> Option<(i32, i32)> {
+        match self {
+            Self::WholeYear => None,
+            Self::Single => Some((0, 1)),
+            // Centred: the month named in the middle, an even count falling
+            // one month forwards. `-3` is the only centred span the surface
+            // has.
+            Self::Centred(count) => Some((-(count - 1) / 2, count)),
+            Self::Forward(count) => Some((0, count)),
+        }
+    }
+}
+
+/// The span the arguments ask for.
+///
+/// A span flag is the reader's own reading of the range, so it wins over the
+/// shape of the positionals; `-y` names a year and nothing else, which is
+/// what `cal(1)` reads it as. `-n N` is bounded below by 1 at parse time, so
+/// a count reaching here is always positive.
+fn span_of(args: &CalArgs) -> Span {
+    if args.year {
+        return Span::WholeYear;
+    }
+    if let Some(months) = args.months {
+        return Span::Forward(months);
+    }
+    if args.three {
+        return Span::Centred(3);
+    }
+    match args.positional.len() {
+        // A bare year asks for the year, as `cal(1)` reads it.
+        1 => Span::WholeYear,
+        _ => Span::Single,
+    }
+}
+
 /// Civil-month view: `cal`, `cal 2026`, `cal 2026 9`, `-y`, `-3`, `-n N`.
 fn run_civil(
     args: &CalArgs,
@@ -83,8 +143,7 @@ fn run_civil(
 ) -> Result<(), CalError> {
     let (year, month) = match args.positional.len() {
         0 => (today.year, today.month),
-        // A bare year means the whole year, so it starts in January.
-        1 => (positional_int(&args.positional[0])?, 1),
+        1 => (positional_int(&args.positional[0])?, today.month),
         2 => (
             positional_int(&args.positional[0])?,
             positional_int(&args.positional[1])?,
@@ -98,38 +157,49 @@ fn run_civil(
     calendar::check_year(year)?;
     calendar::check_month(month)?;
 
-    // A single positional is a year, so it always means the whole year; `-n`,
-    // `-3` and `-y` can extend a month request.
-    let count = if args.positional.len() == 1 && args.months.is_none() && !args.three {
-        12
-    } else {
-        month_count(args)
-    };
-    let mut cursor = CivilDate::new(year, month, 1);
-    for index in 0..count {
+    for (index, first) in civil_months(year, month, span_of(args))?
+        .into_iter()
+        .enumerate()
+    {
         if index > 0 {
             out.push('\n');
         }
-        if cursor.year > MAX_YEAR {
-            return Err(CalError::YearOutOfRange {
-                year: i64::from(cursor.year),
-                min: calendar::MIN_YEAR,
-                max: MAX_YEAR,
-            });
-        }
         let grid = Grid::civil(
-            calgrid::civil_title(cursor.year, cursor.month),
-            cursor.year,
-            cursor.month,
+            calgrid::civil_title(first.year, first.month),
+            first.year,
+            first.month,
             week_start,
             style,
             today,
             color,
         )?;
         grid.render(out);
-        cursor = cursor.add_months(1);
     }
     Ok(())
+}
+
+/// The civil months a request prints, as the first day of each.
+///
+/// The months are stepped through the one sequence both views share, so a
+/// window crosses a year boundary the way `cal(1)`'s does: `cal 2026 12 -3`
+/// is 十一月, 十二月 and 一月 2027. A month outside the supported range is
+/// reported by name rather than clipped, so a window that runs off the end of
+/// the range fails instead of coming back short.
+fn civil_months(year: i32, month: i32, span: Span) -> Result<Vec<CivilDate>, CalError> {
+    let (first, count) = match span.window() {
+        Some(window) => window,
+        // A whole year is the twelve months of the year the anchor names, so
+        // it is a window of the same sequence measured from the anchor.
+        None => (1 - month, 12),
+    };
+    let anchor = CivilDate::new(year, month, 1);
+    let mut months = Vec::new();
+    for step in 0..count {
+        let first_of_month = anchor.add_months(first + step);
+        calendar::check_year(first_of_month.year)?;
+        months.push(first_of_month);
+    }
+    Ok(months)
 }
 
 /// Lunar-month view: `cal -L`, `cal -L 2026`, `cal -L 2026 7`, `-L -R`.
@@ -143,16 +213,8 @@ fn run_lunar(
 ) -> Result<(), CalError> {
     let current = today.to_solar()?.lunar();
     let (year, month) = match args.positional.len() {
-        0 | 1 => {
-            let year = if args.positional.is_empty() {
-                current.year()
-            } else {
-                positional_int(&args.positional[0])?
-            };
-            // A bare year shows the whole lunar year unless a month is implied.
-            let month = if args.year { 1 } else { current.month() };
-            (year, month)
-        }
+        0 => (current.year(), current.month()),
+        1 => (positional_int(&args.positional[0])?, current.month()),
         2 => (
             positional_int(&args.positional[0])?,
             positional_int(&args.positional[1])?,
@@ -163,9 +225,14 @@ fn run_lunar(
             });
         }
     };
-    let months = calendar::lunar_year(year)?;
-    let selected = select_lunar_months(&months, year, month, args)?;
+    // The month is user input wherever a positional carries it, and its
+    // Chinese name is a table lookup on the way to an error message, so `0`
+    // or `13` would index past the end of the table. Checked before anything
+    // reads it — the check also rejects `i32::MIN`, whose `abs()` would
+    // overflow below.
+    calendar::check_lunar_month(month)?;
 
+    let selected = select_lunar_months(year, month, args.leap, span_of(args))?;
     for (index, month) in selected.iter().enumerate() {
         if index > 0 {
             out.push('\n');
@@ -185,99 +252,83 @@ fn run_lunar(
 
 /// Resolves which lunar months a `-L` invocation should print.
 ///
-/// `cal -L 2026` walks the whole lunar year, so it picks up the leap month on
-/// its own; an explicit `年 月` prints just that month, and only prints the
-/// leap month when `-R` is given. `-3` / `-n N` widen an explicit month to a
-/// span centred on it, and `-y` widens it to the twelve months that start
-/// there — the same reading the civil view gives `cal 2026 7 -y`, which
-/// prints July through the following June.
-///
-/// `-y` was reaching here as a span of twelve and being centred like one, so
-/// `cal -L 2026 12 -y` printed the last **seven** months of the year instead:
-/// the span was clamped to the months that exist after a centred start.
+/// The month named anchors every span and `-y` ignores it: `-y` names a year,
+/// exactly as `cal(1)` reads it, and a lunar year walks its own months with
+/// the leap month in its place.
 fn select_lunar_months(
-    year: &Arc<LunarYear>,
-    year_number: i32,
+    year: i32,
     month: i32,
-    args: &CalArgs,
+    leap: bool,
+    span: Span,
 ) -> Result<Vec<LunarMonth>, CalError> {
-    let all = calendar::lunar_year_months(year);
-
-    if args.positional.len() >= 2 {
-        // The month is user-supplied here, and its Chinese name is a table
-        // lookup, so `0` or `13` would index past the end of the table and
-        // panic. Validate it before anything reads it — the check also
-        // rejects `i32::MIN`, whose `abs()` would overflow below.
-        calendar::check_lunar_month(month)?;
-        let wanted = if args.leap { -month.abs() } else { month };
-        let Some(anchor) = calendar::lunar_year_month(year, wanted) else {
-            return match args.leap {
-                true => Err(CalError::NoLeapMonth { year: year_number }),
-                false => Err(CalError::NoSuchLunarMonth {
-                    year: year_number,
-                    month,
-                }),
-            };
+    let months = calendar::lunar_year(year)?;
+    let wanted = if leap { -month.abs() } else { month };
+    let Some(anchor) = calendar::lunar_year_month(&months, wanted) else {
+        return match leap {
+            true => Err(CalError::NoLeapMonth { year }),
+            false => Err(CalError::NoSuchLunarMonth { year, month }),
         };
-        // `-3` / `-n N` / `-y` widen the request the way they do in the civil
-        // view: the named month plus its neighbours, centred on it. A span of
-        // one is the named month alone, which is what an explicit `年 月`
-        // always was.
-        let span = month_count(args);
-        if span <= 1 {
-            return Ok(vec![anchor]);
-        }
-        let start = all
-            .iter()
-            .position(|candidate| candidate.month() == anchor.month())
-            .unwrap_or(0);
-        return Ok(span_from(all, start, span));
+    };
+    match span.window() {
+        None => Ok(calendar::lunar_year_months(&months)),
+        Some((first, count)) => lunar_sequence(&anchor, first, count),
     }
-
-    // A whole-year request, or an explicit span, walks every month.
-    let whole_year = args.year || args.positional.len() == 1;
-    if whole_year || args.three || args.months.is_some() {
-        return Ok(all);
-    }
-
-    // A single month, defaulting to the one the reference day falls in.
-    let start = all
-        .iter()
-        .position(|candidate| candidate.month() == month)
-        .unwrap_or(0);
-    let span = month_count(args);
-    Ok(span_from(all, start, span))
 }
 
-/// `span` months centred on `offset` months into `all`.
+/// `count` consecutive lunar months, the first of them `first` months before
+/// `anchor`.
 ///
-/// Centring is the convention `-3` and `-n N` established: the named month
-/// with one either side. At either end of the year the window is **shifted
-/// back** to keep its full length, because a centred window that does not fit
-/// has to give up one end or the other, and the length is what the reader
-/// asked for. Three months centred on 十二月 are 十月, 冬月, 腊月; three
-/// centred on 正月 are 正月, 二月, 三月.
-///
-/// The old code clamped the start and then took `span`, which cannot satisfy
-/// both the centre and the length once the window runs off the end: a
-/// three-month span at 十二月 came back as two, and a twelve-month `-y` as
-/// seven. Clamping the *end* rather than the start is what makes the two
-/// simultaneously satisfiable.
-fn span_from(all: Vec<LunarMonth>, offset: usize, span: i32) -> Vec<LunarMonth> {
-    let span = match usize::try_from(span) {
-        Ok(span) => span,
-        Err(_) => return all,
+/// The lunar month sequence is continuous — 腊月 is followed by the next
+/// year's 正月 — so a window that runs off the end of a year continues in the
+/// next one instead of stopping short. Every grid is titled with its own
+/// ganzhi year, so a window that crosses the new year reads without a note.
+/// The months come from the years the window actually reaches, and a year
+/// outside the supported range is reported: the window is what reached past
+/// the end, and the year it reached is the honest thing to name.
+fn lunar_sequence(
+    anchor: &LunarMonth,
+    first: i32,
+    count: i32,
+) -> Result<Vec<LunarMonth>, CalError> {
+    let mut sequence = lunar_months_of(anchor.year())?;
+    let Some(start) = sequence
+        .iter()
+        .position(|month| month.month() == anchor.month())
+    else {
+        return Err(CalError::NoSuchLunarMonth {
+            year: anchor.year(),
+            month: anchor.month(),
+        });
     };
-    match span >= all.len() {
-        true => all,
-        false => {
-            // Centre, then shift the whole window back inside the year.
-            let start = offset
-                .saturating_sub(span.saturating_sub(1) / 2)
-                .min(all.len().saturating_sub(span));
-            all.into_iter().skip(start).take(span).collect()
-        }
+    // How many months of earlier years the window's first month needs, and
+    // the year the sequence starts with: years are prepended until the window
+    // starts inside what is held.
+    let mut before = start as i64 + i64::from(first);
+    let mut year = anchor.year();
+    while before < 0 {
+        year -= 1;
+        let mut earlier = lunar_months_of(year)?;
+        before += earlier.len() as i64;
+        earlier.append(&mut sequence);
+        sequence = earlier;
     }
+    // And forwards, until the sequence holds every month the window wants.
+    while (sequence.len() as i64) < before + i64::from(count) {
+        year += 1;
+        sequence.append(&mut lunar_months_of(year)?);
+    }
+    let (Ok(first), Ok(count)) = (usize::try_from(before), usize::try_from(count)) else {
+        return Err(CalError::BadArgument {
+            detail: String::new(),
+        });
+    };
+    Ok(sequence[first..first + count].to_vec())
+}
+
+/// The months of a lunar year, in calendar order.
+fn lunar_months_of(year: i32) -> Result<Vec<LunarMonth>, CalError> {
+    let year = calendar::lunar_year(year)?;
+    Ok(calendar::lunar_year_months(&year))
 }
 
 /// `农历 丙午年 七月`, with `闰` for a leap month; the year pillar and the
@@ -289,26 +340,6 @@ fn lunar_month_title(month: &LunarMonth) -> String {
         .map(Lunar::year_in_gan_zhi)
         .unwrap_or_default();
     calgrid::lunar_title(&gan_zhi, &calendar::lunar_month_name(month.month()))
-}
-
-/// How many months to print: `-n N`, `-3`, or — for a whole-year request such
-/// as `cal -y` or `cal 2026` — all twelve.
-///
-/// `-n` is bounded below by 1 at parse time, so there is no span here to
-/// repair: it used to be `months.max(1)`, which answered `cal 2026 9 -n 0`
-/// with a month the reader did not ask for, and every other out-of-range
-/// argument in this tool is reported.
-fn month_count(args: &CalArgs) -> i32 {
-    if let Some(months) = args.months {
-        return months;
-    }
-    if args.three {
-        return 3;
-    }
-    if args.year {
-        return 12;
-    }
-    1
 }
 
 /// Parses a positional integer.
