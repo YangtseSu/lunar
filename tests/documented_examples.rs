@@ -875,6 +875,49 @@ fn a_numeric_zone_offset_is_accepted_and_shifts_the_day() {
     );
 }
 
+/// An impossible zone offset is refused, not applied.
+///
+/// `zone_offset` counted the digits and never looked at them, so `+99:00`
+/// shifted the day four days forward and `+09:99` ninety-nine minutes, both
+/// reported as a confident answer. No zone is 99 hours from UTC, and
+/// `date(1)` refuses both. The boundary it does accept — `24:00`, a whole
+/// day — is accepted here too.
+#[test]
+fn an_impossible_zone_offset_is_refused() {
+    for zone in [
+        "+99:00", "+09:99", "+2401", "+24:01", "-99:99", "+25", "-25",
+    ] {
+        assert!(
+            run_failing(&["date", "-d", &format!("2026-09-07T15:30{zone}")])
+                .contains("无法解析的日期"),
+            "zone {zone} is refused"
+        );
+    }
+    // A whole day is a legal offset, and it does move the day.
+    assert_eq!(
+        run(&["date", "-d", "2026-09-07T15:30+24:00", "-f", "%Y-%m-%d"]),
+        "2026-09-08"
+    );
+    // The real offsets are unaffected, and so are the ones at the edge.
+    for (zone, expected) in [
+        ("+00:00", "2026-09-07"),
+        ("+23:59", "2026-09-08"),
+        ("+08:00", "2026-09-07"),
+    ] {
+        assert_eq!(
+            run(&[
+                "date",
+                "-d",
+                &format!("2026-09-07T15:30{zone}"),
+                "-f",
+                "%Y-%m-%d"
+            ]),
+            expected,
+            "zone {zone} is {expected}"
+        );
+    }
+}
+
 /// The compact `hhmm` clock and a bare zone designator are accepted.
 ///
 /// `20260907T1530` is in the grammar and the date part worked, but

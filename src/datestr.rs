@@ -364,8 +364,15 @@ fn split_zone(rest: &str) -> (&str, Option<&str>) {
     (rest, None)
 }
 
-/// Offset of a `UTC` or `+HH[[:]MM]` designator. POSIX signs are inverted:
-/// `+0800` means 8 hours *behind* UTC.
+/// Offset of a `UTC` or `+HH[[:]MM]` designator, in seconds. POSIX signs are
+/// inverted: `+0800` means 8 hours *behind* UTC.
+///
+/// The hours and minutes are **range-checked**, not merely counted: the digit
+/// count was all that was checked, so `+99:00` and `+09:99` parsed and
+/// silently moved the day by four days and by ninety-nine minutes. No zone on
+/// earth is 99 hours off UTC, and `date(1)` refuses both. `24:00` is the one
+/// hour `date(1)` accepts past midnight, so it is accepted here too: it is a
+/// whole day, not an offset.
 fn zone_offset(zone: &str) -> Option<i64> {
     if zone.eq_ignore_ascii_case("utc") || zone.eq_ignore_ascii_case("gmt") {
         return Some(0);
@@ -385,7 +392,10 @@ fn zone_offset(zone: &str) -> Option<i64> {
         ),
         _ => return None,
     };
-    Some(sign * (hours * 3600 + minutes * 60))
+    match hours <= 24 && (hours < 24 || minutes == 0) && minutes <= 59 {
+        true => Some(sign * (hours * 3600 + minutes * 60)),
+        false => None,
+    }
 }
 
 /// Parses `hh`, `hh:mm`, `hh:mm:ss` and the compact `hhmm`.
