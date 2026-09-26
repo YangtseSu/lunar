@@ -213,17 +213,59 @@ fn the_usual_civil_festivals_appear() {
     }
 }
 
-/// Month lengths, so a test can state how many days a grid must show.
+/// The days a civil month has, so a test can state what a grid must show.
 mod calendar {
-    /// Days in `(year, month)`, with `month` 1-12.
-    pub fn monthrange(year: i32, month: i32) -> (i32, u32) {
-        const LENGTHS: [u32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
-        let leap = year % 4 == 0 && (year % 100 != 0 || year % 400 == 0);
-        let length = match month {
-            2 if leap => 29,
-            m => LENGTHS[(m - 1) as usize],
-        };
-        (0, length)
+    /// Every day of `(year, month)` that **exists**, in order.
+    ///
+    /// Asked of the binary rather than computed, and not as `1..=length`.
+    /// The tool follows `lunar-rs`, which uses the **Julian** leap rule below
+    /// 1600 and drops the ten reform days of October 1582 — so a test that
+    /// computed a length with the Gregorian rule would disagree with the
+    /// engine on 384 Februaries, and October 1582 is not numbered 1..=21 at
+    /// all but 1, 2, 3, 4, 15 … 31. The engine is the only authority for
+    /// which days exist, and the binary is the only way to ask it.
+    pub fn existing_days(year: i32, month: i32) -> Vec<u32> {
+        let mut days = Vec::new();
+        for day in 1..=length(year, month) {
+            let output = super::binary()
+                .args([
+                    "date",
+                    "-d",
+                    &format!("{year:04}-{month:02}-{day:02}"),
+                    "-f",
+                    "%Y-%m-%d",
+                ])
+                .output()
+                .expect("lunar runs");
+            if output.status.success() {
+                days.push(day);
+            }
+        }
+        days
+    }
+
+    /// The last day of `(year, month)` that the tool will name, which is its
+    /// length. Every month has 28 to 31, so the answer is the first of those
+    /// four that is not 不存在.
+    fn length(year: i32, month: i32) -> u32 {
+        for day in [31, 30, 29, 28] {
+            // A fresh `Command` each time: `args` appends, so reusing one
+            // would carry the previous probe's `-d` along with it.
+            let output = super::binary()
+                .args([
+                    "date",
+                    "-d",
+                    &format!("{year:04}-{month:02}-{day:02}"),
+                    "-f",
+                    "%Y-%m-%d",
+                ])
+                .output()
+                .expect("lunar runs");
+            if output.status.success() {
+                return day as u32;
+            }
+        }
+        panic!("{year}-{month} has no day in 28..=31")
     }
 }
 
@@ -1090,24 +1132,39 @@ fn civil_overlay_grid_matches_documented_output() {
 
 /// A grid must show every day of its month, including the last one, and
 /// never a day borrowed from the neighbouring months.
+///
+/// The year is the point of the sweep. 2026 alone is a year both calendars
+/// agree about; 100, 1300 and 1500 are not, because the engine follows the
+/// Julian leap rule below 1600 and this test's own month-length helper used to
+/// compute the Gregorian one — so the assertion was pinned to a length the
+/// tool never used, and would have failed on any pre-1600 February the moment
+/// the sweep reached one. 1582 is in the sweep for the other reason: it is
+/// the one month the engine counts shorter than the calendar has.
 #[test]
 fn civil_grid_shows_every_day_of_the_month() {
-    for month in 1..=12 {
-        let grid = run(&["cal", "2026", &month.to_string()]);
-        let labels: Vec<&str> = grid
-            .lines()
-            .skip(2)
-            .step_by(2)
-            .filter(|line| !line.trim().is_empty())
-            .flat_map(|line| line.split_whitespace())
-            .collect();
-        let days = calendar::monthrange(2026, month).1;
-        let shown: Vec<u32> = labels.iter().filter_map(|cell| cell.parse().ok()).collect();
-        assert_eq!(
-            shown,
-            (1..=days).collect::<Vec<_>>(),
-            "every day of 2026-{month}, in order:\n{grid}"
-        );
+    for year in [1, 100, 1300, 1500, 1582, 2026, 9999] {
+        for month in 1..=12 {
+            let grid = run(&["cal", &year.to_string(), &month.to_string()]);
+            let labels: Vec<&str> = grid
+                .lines()
+                .skip(2)
+                .step_by(2)
+                .filter(|line| !line.trim().is_empty())
+                .flat_map(|line| line.split_whitespace())
+                .collect();
+            // Compare against the days the month *has*, not `1..=length`:
+            // October 1582 is 21 days long and its labels are 1, 2, 3, 4,
+            // 15 … 31, because the ten reform days are not there to be
+            // numbered. The claim is that no day is dropped and none is
+            // invented, which is what a list of the engine's own surviving
+            // days says.
+            let days = calendar::existing_days(year, month);
+            let shown: Vec<u32> = labels.iter().filter_map(|cell| cell.parse().ok()).collect();
+            assert_eq!(
+                shown, days,
+                "every day of {year}-{month}, in order:\n{grid}"
+            );
+        }
     }
 }
 
