@@ -68,7 +68,7 @@ enum Command {
         lunar: bool,
 
         /// (-l 时)选择闰月
-        #[arg(short = 'R', long = "leap")]
+        #[arg(short = 'R', long = "leap", requires = "lunar")]
         leap: bool,
 
         /// 打印令牌说明
@@ -87,7 +87,7 @@ enum Command {
         lunar: bool,
 
         /// (-L 时)选择闰月
-        #[arg(short = 'R', long = "leap")]
+        #[arg(short = 'R', long = "leap", requires = "lunar")]
         leap: bool,
 
         /// 周日作为一周第一天

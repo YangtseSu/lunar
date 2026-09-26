@@ -1201,6 +1201,41 @@ fn leap_month_is_only_reachable_with_the_leap_flag() {
     assert!(run_failing(&["cal", "-L", "2021", "4", "-R"]).contains("没有闰月"));
 }
 
+/// `-R` names a 闰月, which is a 农历 concept: it is refused without `-l`.
+///
+/// It used to be accepted and ignored, so `date -R -d 2020-04-01` printed the
+/// 公历 date and `cal -R 2020 4` printed 2020年4月 — a flag that read as
+/// agreement while changing nothing, and whose own help says (-l 时).
+/// `-s`/`-m` were made mutually exclusive for the same reason; this is the
+/// one-sided version, since `-l` alone is perfectly meaningful.
+#[test]
+fn the_leap_flag_requires_the_lunar_flag() {
+    for args in [
+        ["date", "-R", "-d", "2020-04-01"].as_slice(),
+        ["date", "--leap", "-d", "2020-04-01"].as_slice(),
+        ["cal", "-R", "2020", "4"].as_slice(),
+        ["cal", "--leap", "2020", "4"].as_slice(),
+    ] {
+        let output = binary().args(args).output().expect("lunar runs");
+        assert!(
+            !output.status.success(),
+            "`lunar {}` must be refused, not silently resolved",
+            args.join(" ")
+        );
+        assert!(
+            String::from_utf8_lossy(&output.stderr).contains("--lunar"),
+            "`lunar {}` says which flag it needs",
+            args.join(" ")
+        );
+    }
+    // With the flag it needs, it is the leap month and nothing else.
+    assert!(run(&["date", "-l", "-R", "2020", "4", "1"]).contains("闰四月初一"));
+    assert!(run(&["cal", "-L", "2020", "4", "-R"]).contains("闰四月"));
+    // And `-l` on its own is still a plain lunar request.
+    assert!(run(&["date", "-l", "2026", "7", "15"]).contains("七月十五"));
+    assert!(run(&["cal", "-L", "2026", "7"]).contains("农历 丙午年 七月"));
+}
+
 /// A lunar month outside `1..=12` is reported, not indexed.
 ///
 /// The month is a table lookup on the way to the error message, so `0`, `13`
