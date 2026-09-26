@@ -1215,6 +1215,40 @@ fn out_of_range_years_are_rejected() {
     assert!(run_failing(&["date", "2023", "2", "30"]).contains("不存在"));
 }
 
+/// October 1582 renders, with the ten reform days simply absent.
+///
+/// The grid stepped the month with `add_days` and validated every slot with
+/// `to_solar`, so a month whose window crossed the gap died with the
+/// `YearMissing` message. The engine counts 21 days in October 1582, not
+/// 31, and the civil view now enumerates the days that exist.
+#[test]
+fn the_reform_gap_renders_as_absent_days() {
+    let grid = run(&["cal", "1582", "10"]);
+    let labels: Vec<&str> = grid
+        .lines()
+        .skip(2)
+        .step_by(2)
+        .filter(|line| !line.trim().is_empty())
+        .flat_map(|line| line.split_whitespace())
+        .collect();
+    // 31 days proleptic, 21 on the engine's calendar.
+    assert_eq!(labels.len(), 21, "1582-10 has 21 days:\n{grid}");
+    assert_eq!(labels.first(), Some(&"1"));
+    assert_eq!(labels.get(3), Some(&"4"));
+    // The gap leaves no hole in the week: 4 October is a Thursday and the
+    // 15th a Friday, so they sit in adjacent columns.
+    assert_eq!(labels.get(4), Some(&"15"));
+    for day in 5..=14 {
+        assert!(
+            !grid.contains(&format!("\n{day} ")) && !grid.contains(&format!(" {day} ")),
+            "1582-10-{day} does not exist and has no cell:\n{grid}"
+        );
+    }
+    // The months either side are untouched.
+    assert!(run(&["cal", "1582", "9"]).contains("1582年9月"));
+    assert!(run(&["cal", "1582", "11"]).contains("1582年11月"));
+}
+
 #[test]
 fn unsupported_date_strings_are_reported() {
     assert!(run_failing(&["date", "-d", "definitely not a date"]).contains("无法解析"));

@@ -173,7 +173,27 @@ impl Grid {
             let in_month = offset >= 0 && (offset as usize) < count;
             let (label, content, mark) = match in_month {
                 true => {
-                    let date = first.add_days(offset);
+                    // A *civil* month is stepped by its own days, and the
+                    // engine's calendar has fewer of them than a proleptic
+                    // one — October 1582 is 31 days by arithmetic and 21 on
+                    // the calendar, and the ten reform days have no cell to
+                    // draw. A *lunar* month is already counted by the engine
+                    // in days that exist, so it steps normally.
+                    let date = match lunar_view {
+                        true => first.add_days(offset),
+                        false => match first.nth_existing_day(offset as usize) {
+                            Some(date) => date,
+                            None => {
+                                days.push(Entry {
+                                    label: String::new(),
+                                    content: String::new(),
+                                    in_month: false,
+                                    mark: Mark::default(),
+                                });
+                                continue;
+                            }
+                        },
+                    };
                     let solar = date.to_solar()?;
                     let lunar = solar.lunar();
                     let label = match lunar_view {

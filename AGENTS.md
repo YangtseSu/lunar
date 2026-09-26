@@ -464,10 +464,14 @@ The bare-year form is still uncovered. A change to that needs a test you add you
 Do not treat these as intended behaviour, and do not "fix" them silently as a side effect
 of unrelated work — surface them, or fix them deliberately with a test.
 
-- **Any grid spanning 1582-10-05..14 fails outright.** `CivilDate::add_days` is proleptic
-  but each slot is validated with `to_solar()`, so a month whose slot window crosses the
-  reform gap dies with the `YearMissing` message. Verified: `cal 1582 10` errors, while
-  `cal 1582 9` and `cal 1582 11` render fine.
+- ~~**Any grid spanning 1582-10-05..14 fails outright.**~~ **Fixed.** The grid stepped the
+  month with `add_days` and validated every slot with `to_solar`, so October 1582 died on
+  the first reform day. A **civil** month now enumerates the days that *exist*
+  (`CivilDate::nth_existing_day`) instead of adding days, because the engine counts 21 days
+  in that month and 31 in a proleptic one. The gap leaves no hole in the week: 4 October is
+  a Thursday and the 15th a Friday, in adjacent columns, which is what the engine's own
+  `week()` says. A **lunar** month still steps normally — the engine already counts its days
+  in days that exist.
 - ~~**`CalError::TodayOutOfRange` overloaded four unrelated failures.**~~ **Fixed.** An
   unparsable `TZ`, a missing `/etc/localtime`, a clock before 1970 and a local year outside
   1–9999 all printed `当前日期超出支持范围 (1–9999 年)`, so a typo'd `TZ` was answered with a

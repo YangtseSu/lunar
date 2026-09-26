@@ -15,6 +15,20 @@ use crate::calendar::{self, CalError};
 /// Seconds in a day.
 pub const SECS_PER_DAY: i64 = 86_400;
 
+/// Proleptic-Gregorian length of a month, leap years included.
+///
+/// The engine's `days_of_month` reports the days that *exist*, which for
+/// October 1582 is 21 rather than 31. Walking a month needs the proleptic
+/// length to know where to stop.
+fn proleptic_month_days(year: i32, month: i32) -> i32 {
+    const LENGTHS: [i32; 12] = [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
+    match month {
+        2 if solar_util::is_leap_year(year) => 29,
+        1..=12 => LENGTHS[month as usize - 1],
+        _ => 0,
+    }
+}
+
 /// Days from 1970-01-01 to the civil date `y-m-d` (Hinnant's `days_from_civil`).
 ///
 /// Pure calendar arithmetic: no time zone, no leap seconds.
@@ -81,6 +95,39 @@ impl CivilDate {
     /// Weekday, `0 = Sunday`, per `lunar-rs`.
     pub fn weekday(self) -> i32 {
         solar_util::week(self.year, self.month, self.day)
+    }
+
+    /// Whether this date exists in the calendar `lunar-rs` serves.
+    ///
+    /// Proleptic-Gregorian arithmetic says every date does; the engine models
+    /// the 1582 reform and refuses 1582-10-05..=14. A grid asking for a day has
+    /// to know which they are.
+    pub fn exists(self) -> bool {
+        !(self.year == 1582 && self.month == 10 && (5..=14).contains(&self.day))
+    }
+
+    /// The `index`-th day (0-based) of this date's month that **exists**.
+    ///
+    /// October 1582 has 31 days on a proleptic calendar and 21 on the
+    /// engine's, and `days_of_month` reports the *existing* 21 — so the walk
+    /// covers the proleptic length and counts the days that survive. Stepping
+    /// the month by `add_days` cannot work here: the ten reform days are
+    /// counted by the arithmetic and have no cell to draw.
+    pub fn nth_existing_day(self, index: usize) -> Option<Self> {
+        let mut seen = 0usize;
+        for day in 1..=proleptic_month_days(self.year, self.month) {
+            let candidate = Self::new(self.year, self.month, day);
+            match candidate.exists() {
+                false => continue,
+                true => {
+                    if seen == index {
+                        return Some(candidate);
+                    }
+                    seen += 1;
+                }
+            }
+        }
+        None
     }
 
     /// This date plus `delta` days.
