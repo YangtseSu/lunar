@@ -294,7 +294,13 @@ prefers the one a reader scans for; its `PRINCIPAL` list must spell the names **
 does** (`清明节`, `端午节`), since a name that matches nothing sorts last and loses.
 
 **Leap months are negative numbers.** A leap fourth month is `-4`; `m_abs`
-(`src/calendar.rs:108-112`) renders the 闰 prefix. Keep the sign convention.
+(`src/calendar.rs:115-124`) renders the 闰 prefix. Keep the sign convention. `m_abs` takes
+**user input** — it formats the error arms of `CalError::message` — so it range-checks before
+it indexes `lunar_util::MONTH` and prints the raw number when there is no month name. Its leap
+prefix is the rule `Lunar::month_in_chinese` applies; the 月 suffix is this tool's, since the
+engine's own name stops at 正 or 闰四. Do not call `Lunar::from_ymd` from it to borrow the name:
+a fixed probe year has no leap month in most years, and searching for one costs a
+thousand-plus conversions per grid cell.
 
 **Grid width is a display width, measured by `lang::width`.** CJK ideographs and
 full-width forms count 2 columns, everything else 1. Padding is manual
@@ -489,8 +495,8 @@ of unrelated work — surface them, or fix them deliberately with a test.
 - `cal` uses `CalError::MonthOutOfRange { month: -1 }` as a generic "bad argument" sentinel
   (`src/commands/cal.rs`), producing the misleading `月份 -1 非法 (应为 1–12)` — a
   non-numeric positional lands there. The *month* of a `-L` request is not one of them:
-  `select_lunar_months` calls `check_lunar_month` before the lookup, which is what keeps
-  `m_abs` from indexing past `lunar_util::MONTH` (`cal -L 2026 13` used to panic).
+  `select_lunar_months` calls `check_lunar_month` before the lookup, and `m_abs` range-checks
+  on its own account, so no input reaches the `lunar_util::MONTH` index unchecked.
 - `-3` / `-n N` are silently ignored under `-L` whenever a positional is present.
 - `src/main.rs` parses `-m/--monday` and discards it; Monday is hard-coded. The README
   options table implies otherwise.

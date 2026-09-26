@@ -105,10 +105,22 @@ impl fmt::Display for CalError {
 impl std::error::Error for CalError {}
 
 /// Renders a possibly negative (leap) lunar month number in Chinese.
+///
+/// `month` here is **user input** — it reaches the error arms of
+/// [`CalError::message`] — so it is range-checked before it indexes
+/// `lunar_util::MONTH`; a number outside `1..=12` has no month name, and the
+/// raw number is the honest thing to print. The leap prefix is the same rule
+/// `Lunar::month_in_chinese` applies, and is used unchanged for the leap form
+/// a lunar year can actually have.
 fn m_abs(month: i32) -> String {
-    let index = month.unsigned_abs() as usize;
-    let name = lunar_rs::lunar_util::MONTH[index];
-    format!("{}{name}月", if month < 0 { "闰" } else { "" })
+    match check_lunar_month(month) {
+        Ok(()) => format!(
+            "{}{}月",
+            if month < 0 { "闰" } else { "" },
+            lunar_rs::lunar_util::MONTH[month.unsigned_abs() as usize]
+        ),
+        Err(_) => month.to_string(),
+    }
 }
 
 /// Checks a civil year against the supported window.
@@ -211,6 +223,11 @@ pub fn solar_from_lunar(year: i32, month: i32, day: i32) -> Result<Solar, CalErr
 }
 
 /// Chinese lunar month name: `正月`, `闰四月`, `腊月`.
+///
+/// Shares [`m_abs`] with the error messages, which is deliberate: one
+/// rendering of a month number, and one place where it is range-checked. The
+/// leap prefix follows the same rule `Lunar::month_in_chinese` applies, and
+/// the 月 suffix is this tool's — the engine's own name stops at 正 or 闰四.
 pub fn lunar_month_name(month: i32) -> String {
     m_abs(month)
 }

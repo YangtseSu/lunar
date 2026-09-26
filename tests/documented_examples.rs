@@ -947,6 +947,17 @@ fn out_of_range_lunar_months_are_reported_not_indexed() {
             "lunar month {month} is reported as out of range"
         );
     }
+    // An in-range leap month the year does not have still names itself, so
+    // the renderer had to survive the lookup rather than index blindly. 闰腊月
+    // is the rarest form there is — 155 of 9,999 years.
+    assert!(
+        run(&["cal", "-L", "37", "12", "-R"]).contains("闰腊月"),
+        "闰腊月 renders"
+    );
+    assert!(
+        run_failing(&["cal", "-L", "2026", "--", "-1"]).contains("没有闰正月"),
+        "a leap month absent from the year is named, not indexed"
+    );
 }
 
 #[test]
