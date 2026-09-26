@@ -171,6 +171,28 @@ fn parse_absolute(
         return finish(parts, rest.unwrap_or(""), calendar, input).map(Some);
     }
 
+    // MM/DD/YYYY, the US order `date(1)` uses. This is tried *before* the
+    // short-year branch below, which would otherwise claim `09/07/2026` as
+    // the year 9 with a day of 2026. A triple whose last field is four
+    // digits is the year, so the leading fields are bounded at two digits
+    // each and `2026/09/07` still falls through to the YYYY/MM/DD branch.
+    let slashes: Vec<&str> = text.split('/').collect();
+    if slashes.len() == 3
+        && slashes[2].len() == 4
+        && slashes[0].len() <= 2
+        && slashes[1].len() <= 2
+        && slashes
+            .iter()
+            .all(|field| !field.is_empty() && field.bytes().all(|byte| byte.is_ascii_digit()))
+    {
+        let parts = Parts {
+            year: number(slashes[2], input)?,
+            month: number(slashes[0], input)?,
+            day: number(slashes[1], input)?,
+        };
+        return finish(parts, "", calendar, input).map(Some);
+    }
+
     // A date whose first field is a one- to three-digit year, e.g. `1-01-01`
     // or `999-12-31`.
     if bytes.len() >= 6
@@ -199,16 +221,6 @@ fn parse_absolute(
             year: number(&text[0..4], input)?,
             month: number(&text[5..7], input)?,
             day: number(&text[8..10], input)?,
-        };
-        return finish(parts, &lower[10..], calendar, input).map(Some);
-    }
-
-    // MM/DD/YYYY, the US order used by date(1).
-    if bytes.len() >= 10 && bytes[2] == b'/' && bytes[5] == b'/' {
-        let parts = Parts {
-            year: number(&text[6..10], input)?,
-            month: number(&text[0..2], input)?,
-            day: number(&text[3..5], input)?,
         };
         return finish(parts, &lower[10..], calendar, input).map(Some);
     }

@@ -483,9 +483,11 @@ of unrelated work — surface them, or fix them deliberately with a test.
   already handled `next friday`, so the grammar looked covered, but `apply_unit` had no
   `next`/`last` arm and the bare word hit the error branch. The unit loop now consumes the
   word and takes the period that follows it, matching `date(1)` on every period.
-- **`MM/DD/YYYY` is unreachable.** The short-year branch (`src/datestr.rs:175-190`) matches
-  any 1–3-digit-leading `/`-separated triple first, so `09/07/2026` parses as year 9 and
-  then fails validation. The README advertises this form.
+- ~~**`MM/DD/YYYY` is unreachable.**~~ **Fixed.** The short-year branch claimed any
+  `/`-separated triple whose first field is one to three digits, so `09/07/2026` arrived as
+  the year 9 with a day of 2026 and then failed validation. The US order is tried **before**
+  it, keyed on a four-digit *last* field — which is what distinguishes it from `2026/09/07` —
+  and the old fixed-width branch that could never be reached is gone.
 - `20260907T1530` and a bare `2026-09-07Z` both fail — `parse_clock`
   (`src/datestr.rs:340`) has no compact `HHMM` form and returns `None` for an empty clock.
 - Sub-day relative units (`90 minutes ago`, `2 hours`) are accepted but are **no-ops**

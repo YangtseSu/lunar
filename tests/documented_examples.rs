@@ -658,6 +658,51 @@ fn the_two_channels_differ_only_in_the_calendar_they_read() {
     );
 }
 
+/// `MM/DD/YYYY` is the US order the grammar lists, and it is read as such.
+///
+/// The short-year branch claims any `/`-separated triple whose first field is
+/// one to three digits, so `09/07/2026` arrived as the year 9 with a day of
+/// 2026 and then failed validation. The US order is now tried first, and a
+/// four-digit *last* field is what makes it one — so `2026/09/07` and
+/// `1-01-01` still reach the branches that own them.
+#[test]
+fn the_us_slash_order_is_read_as_month_day_year() {
+    for (form, expected) in [
+        ("09/07/2026", "2026-09-07"),
+        ("9/7/2026", "2026-09-07"),
+        ("12/31/1999", "1999-12-31"),
+        ("01/02/2026", "2026-01-02"),
+    ] {
+        assert_eq!(
+            run(&["date", "-d", form, "-f", "%Y-%m-%d"]),
+            expected,
+            "`-d {form}` is the US order"
+        );
+    }
+    // A four-digit *last* field is what makes it the US order, so the
+    // branches that own these are untouched.
+    for (form, expected) in [
+        ("2026/09/07", "2026-09-07"),
+        ("1-01-01", "1-01-01"),
+        ("999-12-31", "999-12-31"),
+        ("2026-09-07", "2026-09-07"),
+        ("20260907", "2026-09-07"),
+    ] {
+        assert_eq!(
+            run(&["date", "-d", form, "-f", "%Y-%m-%d"]),
+            expected,
+            "`-d {form}` keeps its own branch"
+        );
+    }
+    // An impossible US date is reported as such, not misread as a short year.
+    assert!(run_failing(&["date", "-d", "13/45/2026"]).contains("月份 13 非法"));
+    // And it reads in the lunar channel too — both channels share the grammar.
+    assert_eq!(
+        run(&["date", "-l", "-d", "07/15/2026"]),
+        run(&["date", "-l", "2026", "7", "15"])
+    );
+}
+
 /// The forms that name a day rather than a date — a keyword, an epoch, a
 /// weekday, a relative offset — are not written in either calendar, so `-l`
 /// must not change them. Only the absolute forms switch.
