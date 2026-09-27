@@ -97,8 +97,14 @@ print("blocks:", len(blocks), "fails:", fails)
 | 05 | [农历 9999 年末月不可渲染](plans/05-lunar-top-year.md) ✅ | 边界 | P2 |
 | 06 | [date(1) 能力缺口](plans/06-date-parity-forms.md) ✅ | 能力补齐 | P2 |
 | 07 | [过时文档注释清理](plans/07-doc-comment-rot.md) ✅ | 文档 | P2 |
+| 08 | [干支月与宜忌用了不同月柱基准](plans/08-month-pillar-basis.md) | 自相矛盾 | **P1** |
 
 ✅ = 已实施。
+
+计划 08 是**待实施**队列里唯一的一条，由 2026-09-28 接入黄历时发现：`date -a`
+的 `干支` 行印的月柱，与同一份输出里 `宜` / `忌` 所依据的月柱，是两个不同基准
+（1–9999 共 119,988 天）。归属**本仓库**——引擎两个基准都提供且都正确，错的是
+`calendar::month_gan_zhi` 选了 `_exact()`。
 
 `docs/parity.md` 是判定"差异是否为缺陷"的依据；新增差异先登记到那里，再决定是否
 立案。
