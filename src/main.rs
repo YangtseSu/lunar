@@ -2,8 +2,9 @@
 //!
 //! Two subcommands, both powered by the `lunar-rs` calendar engine:
 //!
-//! * `lunar date` — one day's almanac profile (公历/星期/农历/干支/生肖/节气),
-//!   with a custom format mode
+//! * `lunar date` — one day's almanac profile
+//!   (公历/星期/农历/干支/生肖/节气/法定/星座), with a custom format mode and
+//!   a `-a` 黄历 block
 //! * `lunar cal` — month and year grids with lunar days, solar terms and
 //!   festivals, over civil months or, with `-L`, lunar months
 //!
@@ -33,7 +34,7 @@ const FORMAT_HELP: &str = concat!(
     "%Y 公历年   %m 公历月   %d 公历日   %A 星期几单字(一~日)\n",
     "%G 农历年干支(丙午)  %M 农历月汉字(正月/闰六月/腊月)  %N 农历日汉字(初一)\n",
     "%n 农历日数字(23)  %H 干支月(丙申)  %D 干支日(辛巳)\n",
-    "%S 生肖(马)  %Q 节气(当日无则空)  %% 字面%\n",
+    "%S 生肖(马)  %Q 节气(当日无则空)  %Z 星座(处女)  %% 字面%\n",
     "%A 只给单字，前缀自理: 星期%A=星期一 / 周%A=周一 / 礼拜%A=礼拜一\n",
     concat!(
         r"\n 换行  \t 制表符  \r 回车  \% 字面%(同 %%)  \\ 字面反斜杠",
@@ -53,15 +54,24 @@ struct Cli {
 
 #[derive(Debug, Subcommand)]
 enum Command {
-    /// 某一天的农历档案：公历/星期/农历/干支/生肖/节气/法定
+    /// 某一天的农历档案：公历/星期/农历/干支/生肖/节气/法定/星座
     Date {
         /// 日期，date 风格，如 '2026-09-04'（缺省为今天）
         #[arg(short = 'd', long = "date", value_name = "DATE")]
         date: Option<String>,
 
         /// 自定义输出格式（令牌见 `lunar date --help-format`）
-        #[arg(short = 'f', long = "format", value_name = "FORMAT")]
+        #[arg(
+            short = 'f',
+            long = "format",
+            value_name = "FORMAT",
+            conflicts_with = "almanac"
+        )]
         format: Option<String>,
+
+        /// 追加黄历：宜忌/冲煞/神煞/星宿/纳音/方位/物候
+        #[arg(short = 'a', long = "almanac")]
+        almanac: bool,
 
         /// 位置参数按农历解读（`-d` 仍为公历）
         #[arg(short = 'l', long = "lunar")]
@@ -175,6 +185,7 @@ fn main() -> ExitCode {
         Command::Date {
             date,
             format,
+            almanac,
             lunar,
             leap,
             help_format: _,
@@ -183,6 +194,7 @@ fn main() -> ExitCode {
             &date::DateArgs {
                 date: date.clone(),
                 format: format.clone(),
+                almanac: *almanac,
                 lunar: *lunar,
                 leap: *leap,
                 positional: positional.clone(),

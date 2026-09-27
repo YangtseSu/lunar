@@ -327,6 +327,15 @@ pub fn jie_qi(lunar: &Lunar) -> Option<String> {
     }
 }
 
+/// The solar-sign / constellation of a civil day: `天秤` and the other eleven.
+///
+/// A function of the civil month and day alone, which is why it is the one
+/// almanac field the default profile can always print: every day of
+/// 1–9999 has one.
+pub fn xing_zuo(solar: &Solar) -> &'static str {
+    solar.xing_zuo()
+}
+
 /// How many blank cells precede day 1 of a civil month when a week starts on
 /// `week_start` (0 = Sunday).
 pub fn week_offset(year: i32, month: i32, week_start: i32) -> usize {
@@ -474,4 +483,111 @@ pub fn lunar_year_month(year: &LunarYear, month: i32) -> Option<LunarMonth> {
 /// through 冬月/腊月, with the leap month in its place.
 pub fn lunar_year_months(year: &LunarYear) -> Vec<LunarMonth> {
     year.months_in_year().collect()
+}
+
+/// The 黄历 block for one day, as `label: text` lines.
+///
+/// Every line is a one-line forward to the engine's day-level almanac: the
+/// 宜 / 忌 tables, 冲煞, 值神, 十二神煞, 吉神 / 凶煞, 二十八宿, 纳音, 旬空,
+/// 六曜, 小六壬, 九星, 月相, 彭祖百忌, 胎神, the five 方位 and the 物候.
+/// None of them depends on a time of day, which is what lets a date-only tool
+/// print them at all — the ones that would (`time_yi`, `time_chong`) are not
+/// here. The two that can be absent on a given day — 数九 (冬至后 81 天) and
+/// 三伏 (夏至后 30 天起) — are dropped rather than printed empty, the same
+/// way the `节气` line of the day profile is.
+///
+/// The 十二神煞 and the 天神 are the engine's `get_twelve_star` and
+/// `day_tian_shen`; they differ only on a solar-term day (12 a year), and the
+/// almanac prints the 黄道 / 黑道 type, which is what a reader acts on.
+pub fn almanac(lunar: &Lunar) -> Vec<String> {
+    let mut lines = Vec::with_capacity(18);
+    let mut line = |label: &str, text: String| {
+        if !text.is_empty() {
+            lines.push(format!("{label}: {text}"));
+        }
+    };
+
+    line("宜", lunar.day_yi().join("、"));
+    line("忌", lunar.day_ji().join("、"));
+    line(
+        "冲煞",
+        format!("{} 煞{}", lunar.day_chong_desc(), lunar.day_sha()),
+    );
+    line(
+        "值神",
+        format!(
+            "{}  十二神煞: {}({})",
+            lunar.zhi_xing(),
+            lunar.day_tian_shen(),
+            lunar.day_tian_shen_type()
+        ),
+    );
+    line(
+        "吉神",
+        format!(
+            "{}  凶煞: {}",
+            lunar.day_ji_shen().join("、"),
+            lunar.day_xiong_sha().join("、")
+        ),
+    );
+    line(
+        "二十八宿",
+        format!(
+            "{}({}) 值{} 禽{} 门{}{}",
+            lunar.xiu(),
+            lunar.xiu_luck(),
+            lunar.zheng(),
+            lunar.animal(),
+            lunar.gong(),
+            lunar.shou()
+        ),
+    );
+    line(
+        "纳音",
+        format!(
+            "{}  旬空: {}  六曜: {}  小六壬: {}  九星: {}  月相: {}",
+            lunar.day_nayin(),
+            lunar.day_xun_kong(),
+            lunar.liu_yao(),
+            lunar.day_minor_ren().name(),
+            lunar.day_nine_star(),
+            lunar.yue_xiang()
+        ),
+    );
+    line(
+        "彭祖百忌",
+        format!("{} / {}", lunar.peng_zu_gan(), lunar.peng_zu_zhi()),
+    );
+    line(
+        "胎神",
+        format!(
+            "{}  胎元: {}",
+            lunar.day_position_tai(),
+            lunar.day_position_tai_sui()
+        ),
+    );
+    line(
+        "方位",
+        format!(
+            "喜神{}({})、阳贵{}({})、阴贵{}({})、福神{}({})、财神{}({})",
+            lunar.day_position_xi(),
+            lunar.day_position_xi_desc(),
+            lunar.day_position_yang_gui(),
+            lunar.day_position_yang_gui_desc(),
+            lunar.day_position_yin_gui(),
+            lunar.day_position_yin_gui_desc(),
+            lunar.day_position_fu(),
+            lunar.day_position_fu_desc(),
+            lunar.day_position_cai(),
+            lunar.day_position_cai_desc()
+        ),
+    );
+    line("物候", format!("{} ({})", lunar.wu_hou(), lunar.hou()));
+    if let Some(shu_jiu) = lunar.shu_jiu() {
+        line("数九", format!("{shu_jiu}"));
+    }
+    if let Some(fu) = lunar.fu() {
+        line("三伏", format!("{fu}"));
+    }
+    lines
 }

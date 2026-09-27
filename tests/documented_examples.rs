@@ -664,13 +664,15 @@ fn the_color_flags_take_the_last_word() {
 /// and 调休上班 are the one thing about a day the other lines cannot say.
 #[test]
 fn date_profile_reports_the_statutory_calendar() {
-    assert_eq!(
-        run(&["date", "-d", "2026-09-26"]).lines().last(),
-        Some("法定: 中秋节 放假")
+    // 星座 closes the profile, so the statutory line is located by content
+    // rather than by position — and the profile order is pinned separately.
+    assert!(
+        run(&["date", "-d", "2026-09-26"]).contains("法定: 中秋节 放假"),
+        "a 放假 day names the holiday and the fact"
     );
-    assert_eq!(
-        run(&["date", "-d", "2026-10-10"]).lines().last(),
-        Some("法定: 国庆节 调休上班")
+    assert!(
+        run(&["date", "-d", "2026-10-10"]).contains("法定: 国庆节 调休上班"),
+        "a 调休 day says it is a workday"
     );
     assert!(
         !run(&["date", "-d", "2026-09-10"]).contains("法定"),
@@ -688,7 +690,7 @@ fn a_lunar_date_resolves_to_its_civil_day() {
     );
     assert_eq!(
         run(&["date", "-l", "2020", "4", "1", "-R"]),
-        "公历: 2020年5月23日 星期六\n农历: 庚子年闰四月初一\n干支: 庚子 辛巳 丙寅\n生肖: 鼠"
+        "公历: 2020年5月23日 星期六\n农历: 庚子年闰四月初一\n干支: 庚子 辛巳 丙寅\n生肖: 鼠\n星座: 双子"
     );
     // A lunar month that the year does not have.
     assert!(run_failing(&["date", "-l", "2026", "13", "1"]).contains("农历月份 13 非法"));
@@ -1475,7 +1477,7 @@ fn a_compact_clock_and_a_bare_zone_are_accepted() {
 fn date_profile_matches_documented_output() {
     assert_eq!(
         run(&["date", "-d", "2026-09-07"]),
-        "公历: 2026年9月7日 星期一\n农历: 丙午年七月廿六\n干支: 丙午 丙申 甲申\n生肖: 马\n节气: 白露"
+        "公历: 2026年9月7日 星期一\n农历: 丙午年七月廿六\n干支: 丙午 丙申 甲申\n生肖: 马\n节气: 白露\n星座: 处女"
     );
 }
 
@@ -1483,7 +1485,7 @@ fn date_profile_matches_documented_output() {
 fn date_profile_shows_leap_month() {
     assert_eq!(
         run(&["date", "-d", "2020-05-23"]),
-        "公历: 2020年5月23日 星期六\n农历: 庚子年闰四月初一\n干支: 庚子 辛巳 丙寅\n生肖: 鼠"
+        "公历: 2020年5月23日 星期六\n农历: 庚子年闰四月初一\n干支: 庚子 辛巳 丙寅\n生肖: 鼠\n星座: 双子"
     );
 }
 
@@ -1495,8 +1497,117 @@ fn date_accepts_positional_year_month_day() {
     );
     assert_eq!(
         run(&["date", "2026", "2", "17"]),
-        "公历: 2026年2月17日 星期二\n农历: 丙午年正月初一\n干支: 丙午 庚寅 壬戌\n生肖: 马\n法定: 春节 放假"
+        "公历: 2026年2月17日 星期二\n农历: 丙午年正月初一\n干支: 丙午 庚寅 壬戌\n生肖: 马\n法定: 春节 放假\n星座: 水瓶"
     );
+}
+
+/// The 星座 line closes the profile and is never missing: a constellation is
+/// a function of the civil month and day alone, so — unlike `节气` and `法定` —
+/// it has no day it fails to have. Its position is part of the contract, since
+/// the conditional lines above it would otherwise push it around.
+#[test]
+fn the_profile_ends_with_the_constellation() {
+    for day in ["2026-09-07", "2026-09-26", "2020-05-23", "1582-10-15"] {
+        let profile = run(&["date", "-d", day]);
+        let last = profile.lines().last().expect("at least one line");
+        assert!(
+            last.starts_with("星座: "),
+            "{day}: the last line is the constellation, got {last:?}"
+        );
+    }
+    assert_eq!(run(&["date", "-d", "2026-09-07", "-f", "%Z"]), "处女");
+    // The boundaries: 处女 ends 9-22, 天秤 runs 9-23 to 10-23.
+    assert_eq!(run(&["date", "-d", "2026-09-22", "-f", "%Z"]), "处女");
+    assert_eq!(run(&["date", "-d", "2026-09-23", "-f", "%Z"]), "天秤");
+    assert_eq!(run(&["date", "-d", "2026-10-23", "-f", "%Z"]), "天秤");
+    assert_eq!(run(&["date", "-d", "2026-10-24", "-f", "%Z"]), "天蝎");
+    // A day with no solar term, and a 放假 day, both still end with one.
+    assert!(run(&["date", "-d", "2026-09-24"]).ends_with("星座: 天秤"));
+    assert!(run(&["date", "-d", "2026-09-25"]).ends_with("星座: 天秤"));
+}
+
+/// `-a` appends the whole 黄历 block, and the profile it follows is exactly
+/// the default one — the switch adds, it never substitutes.
+#[test]
+fn the_almanac_block_follows_the_whole_profile() {
+    let profile = run(&["date", "-d", "2026-09-07"]);
+    let with_block = run(&["date", "-a", "-d", "2026-09-07"]);
+    assert!(
+        with_block.starts_with(&profile),
+        "the profile is the head of the almanac run"
+    );
+    for label in [
+        "宜:",
+        "忌:",
+        "冲煞:",
+        "值神:",
+        "吉神:",
+        "二十八宿:",
+        "纳音:",
+        "彭祖百忌:",
+        "胎神:",
+        "方位:",
+        "物候:",
+    ] {
+        assert!(
+            with_block.contains(&format!("\n{label} ")),
+            "the block has a {label} line"
+        );
+    }
+}
+
+/// The seasonal groups are omitted on the days that have none, the same way
+/// the `节气` line is — never printed empty.
+#[test]
+fn a_seasonal_group_is_omitted_rather_than_printed_empty() {
+    let september = run(&["date", "-a", "-d", "2026-09-07"]);
+    assert!(
+        !september.contains("数九") && !september.contains("三伏"),
+        "neither 数九 nor 三伏 is running in September"
+    );
+    // 数九 runs from 冬至 for 81 days; 三伏 from 夏至.
+    assert!(
+        run(&["date", "-a", "-d", "2026-01-20"]).contains("数九: 四九第4天"),
+        "数九 names the period and the day in it"
+    );
+    assert!(
+        run(&["date", "-a", "-d", "2026-07-25"]).contains("三伏: 中伏第1天"),
+        "三伏 names the period and the day in it"
+    );
+    for line in run(&["date", "-a", "-d", "2026-01-20"]).lines() {
+        assert!(!line.ends_with(':'), "no empty group: {line:?}");
+    }
+}
+
+/// The block and `-f` are two shapes of one answer, so clap refuses the pair
+/// rather than letting one silently win.
+#[test]
+fn the_almanac_and_a_format_are_refused_together() {
+    for args in [
+        ["date", "-a", "-f", "%G", "-d", "2026-09-07"].as_slice(),
+        ["date", "-f", "%G", "-a", "-d", "2026-09-07"].as_slice(),
+        ["date", "--almanac", "--format", "%G", "-d", "2026-09-07"].as_slice(),
+    ] {
+        assert!(
+            run_failing(args).contains("cannot be used with"),
+            "{args:?} is refused"
+        );
+    }
+}
+
+/// The block is a property of the **day**, never of a time of day: `T15:30`
+/// and a zone must not move a single line of it, which is what lets a tool
+/// that keeps no clock print it at all.
+#[test]
+fn the_almanac_does_not_depend_on_a_time_of_day() {
+    let plain = run(&["date", "-a", "-d", "2026-09-07"]);
+    for form in ["2026-09-07T15:30", "2026-09-07T23:30", "2026-09-07T00:00Z"] {
+        assert_eq!(
+            run(&["date", "-a", "-d", form]),
+            plain,
+            "{form} is the same day and the same almanac"
+        );
+    }
 }
 
 #[test]
@@ -1538,11 +1649,11 @@ fn date_format_covers_every_documented_token() {
         run(&[
             "date",
             "-f",
-            "%Y|%m|%d|%A|%G|%M|%N|%n|%H|%D|%S|%Q|%%",
+            "%Y|%m|%d|%A|%G|%M|%N|%n|%H|%D|%S|%Q|%Z|%%",
             "-d",
             "2026-09-07"
         ]),
-        "2026|09|07|一|丙午|七月|廿六|26|丙申|甲申|马|白露|%"
+        "2026|09|07|一|丙午|七月|廿六|26|丙申|甲申|马|白露|处女|%"
     );
 }
 
@@ -2148,6 +2259,7 @@ fn help_format_lists_the_tokens() {
     assert!(help.contains("%Y 公历年"));
     assert!(help.contains("%Q 节气"));
     assert!(help.contains("\\n 换行"));
+    assert!(help.contains("%Z 星座"));
 }
 
 /// The token help does not depend on a zone it never uses.

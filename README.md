@@ -5,15 +5,17 @@ pure-Rust 寿星天文历 engine. It exposes two subcommands modelled on the Uni
 they are named after:
 
 - **`lunar date`** — one day's almanac: 公历 / 星期 / 农历 / 干支 / 生肖 / 节气 /
-  法定, queryable from either calendar, with a custom `-f` format engine.
+  法定 / 星座, queryable from either calendar, with a custom `-f` format engine
+  and a `-a` 黄历 block.
 - **`lunar cal`** — `cal(1)`-style month and year grids overlaid with lunar days,
   solar terms, festivals and the statutory calendar (放假 / 调休), over civil
   months or, with `-L`, lunar months.
 
 Every calendar answer — the solar↔lunar conversion, the 24 solar terms, ganzhi,
-the festival tables and the State Council holiday table — is delegated to
-`lunar-rs`. This repository owns only argument parsing, output shaping and grid
-layout; it never implements calendar arithmetic of its own.
+the festival tables, the 黄历 (宜忌 / 冲煞 / 神煞 / 星宿 / 纳音 / 方位) and the
+State Council holiday table — is delegated to `lunar-rs`. This repository owns
+only argument parsing, output shaping and grid layout; it never implements
+calendar arithmetic of its own.
 
 ```bash
 cargo build --release
@@ -30,10 +32,12 @@ $ lunar date -d 2026-09-07
 干支: 丙午 丙申 甲申
 生肖: 马
 节气: 白露
+星座: 处女
 ```
 
-The `节气` line is omitted when the day carries no solar term. A leap month shows
-up in the month name:
+The `节气` line is omitted when the day carries no solar term, and the
+`星座` line — last, and never omitted — is a function of the civil month and
+day alone. A leap month shows up in the month name:
 
 ```console
 $ lunar date -d 2020-05-23
@@ -41,6 +45,7 @@ $ lunar date -d 2020-05-23
 农历: 庚子年闰四月初一
 干支: 庚子 辛巳 丙寅
 生肖: 鼠
+星座: 双子
 ```
 
 Input comes from either channel, and both read the same grammar:
@@ -54,6 +59,7 @@ Input comes from either channel, and both read the same grammar:
 | `-l, --lunar` | read the positional / `-d` date as **农历** instead of 公历 |
 | `-R, --leap` | with `-l`, name the leap month (refused without `-l`) |
 | `-f, --format <FORMAT>` | expand a custom format instead of the profile |
+| `-a, --almanac` | append the 黄历 block after the profile (refused with `-f`) |
 | `--help-format` | print the token table |
 
 `-d` is always 公历; the positionals follow `-l`. The two differ in nothing else,
@@ -66,12 +72,14 @@ $ lunar date -l -d 2026-07-15      # 农历 2026 年七月十五
 农历: 丙午年七月十五
 干支: 丙午 丙申 癸酉
 生肖: 马
+星座: 处女
 
 $ lunar date -d 2026-07-15         # 公历 2026 年 7 月 15 日
 公历: 2026年7月15日 星期三
 农历: 丙午年六月初二
 干支: 丙午 乙未 庚寅
 生肖: 马
+星座: 巨蟹
 ```
 
 `-R` names the leap month, so 庚子年闰四月初一 resolves to 2020-05-23:
@@ -82,6 +90,7 @@ $ lunar date -l -R -d 2020-04-01
 农历: 庚子年闰四月初一
 干支: 庚子 辛巳 丙寅
 生肖: 鼠
+星座: 双子
 ```
 
 Only forms that name a *date* switch calendars. `now`, `tomorrow`, `next friday`
@@ -126,6 +135,7 @@ $ lunar date -d 2026-09-26
 干支: 丙午 丁酉 癸卯
 生肖: 马
 法定: 中秋节 放假
+星座: 天秤
 
 $ lunar date -d 2026-10-10
 公历: 2026年10月10日 星期六
@@ -133,6 +143,7 @@ $ lunar date -d 2026-10-10
 干支: 丙午 戊戌 丁巳
 生肖: 马
 法定: 国庆节 调休上班
+星座: 天秤
 ```
 
 A date that does not exist in the calendar named is reported as such, with the
@@ -158,6 +169,9 @@ $ lunar date -f '%G年%M%N，星期%A\n干支日：%D' -d 2026-09-07
 
 $ lunar date -f '周%A 农历%M%N（日序 %n），生肖%S，节气：%Q' -d 2026-09-07
 周一 农历七月廿六（日序 26），生肖马，节气：白露
+
+$ lunar date -f '星座%Z，%Q' -d 2026-09-07
+星座处女，白露
 ```
 
 | token | meaning |
@@ -174,6 +188,7 @@ $ lunar date -f '周%A 农历%M%N（日序 %n），生肖%S，节气：%Q' -d 20
 | `%D` | 干支日 (辛巳) |
 | `%S` | 生肖 (马) |
 | `%Q` | 节气 (当日无则空) |
+| `%Z` | 星座 (处女) |
 | `%%` | 字面 `%` |
 
 `%A` yields only the weekday character, so any prefix works: `星期%A` = 星期一,
@@ -181,6 +196,62 @@ $ lunar date -f '周%A 农历%M%N（日序 %n），生肖%S，节气：%Q' -d 20
 yields it: `\n` a newline, `\t` a tab, `\r` a carriage return, `\%` a literal `%`
 (as `%%` does) and `\\` a literal backslash. `lunar date --help-format` prints
 the same table.
+
+### The 黄历 block
+
+`-a` / `--almanac` appends the day's almanac after the profile — 宜忌, 冲煞,
+神煞, 星宿, 纳音, 方位 and 物候, all of them the engine's own tables:
+
+```console
+$ lunar date -a -d 2026-09-07
+公历: 2026年9月7日 星期一
+农历: 丙午年七月廿六
+干支: 丙午 丙申 甲申
+生肖: 马
+节气: 白露
+星座: 处女
+宜: 嫁娶、出行、伐木、拆卸、修造、动土、移徙、安葬、破土、修坟、立碑
+忌: 掘井、祈福、安床、开市、入宅、挂匾、开光
+冲煞: (戊寅)虎 煞南
+值神: 闭  十二神煞: 天牢(黑道)
+吉神: 月空、王日、天马、五富、不将、圣心、除神、鸣吠  凶煞: 游祸、血支、五离、白虎
+二十八宿: 毕(吉) 值月 禽乌 门西白虎
+纳音: 泉中水  旬空: 午未  六曜: 友引  小六壬: 留连  九星: 一白水天枢  月相: 蛾眉残
+彭祖百忌: 甲不开仓财物耗散 / 申不安床鬼祟入房
+胎神: 占门炉 外西北  胎元: 离
+方位: 喜神艮(东北)、阳贵坤(西南)、阴贵艮(东北)、福神坎(正北)、财神艮(东北)
+物候: 鸿雁来 (白露 初候)
+```
+
+Two of the groups are seasonal and only exist on part of the year — 数九 runs
+from 冬至 for 81 days, 三伏 from 夏至 — so their lines are **omitted** on the
+days that have none, exactly as `节气` is. 2026-07-25 is in the 中伏:
+
+```console
+$ lunar date -a -d 2026-07-25
+公历: 2026年7月25日 星期六
+农历: 丙午年六月十二
+干支: 丙午 乙未 庚子
+生肖: 马
+星座: 狮子
+宜: 祭祀、祈福、解除、整手足甲、安床、沐浴、入殓、移柩、破土、启钻、安葬、谢土
+忌: 嫁娶、斋醮、开市、出火、入宅、移徙、出行、作灶、安门、伐木
+冲煞: (甲午)马 煞南
+值神: 执  十二神煞: 天刑(黑道)
+吉神: 月空、金堂、解神、鸣吠对  凶煞: 月害、大时、大败、咸池、小耗、五虚、九坎、九焦、归忌、天刑
+二十八宿: 氐(凶) 值土 禽貉 门东青龙
+纳音: 壁上土  旬空: 辰巳  六曜: 大安  小六壬: 小吉  九星: 九紫火隐元  月相: 宵
+彭祖百忌: 庚不经络织机虚张 / 子不问卜自惹祸殃
+胎神: 占碓磨 房内南  胎元: 兑
+方位: 喜神乾(西北)、阳贵离(正南)、阴贵艮(东北)、福神坤(西南)、财神震(正东)
+物候: 腐草为萤 (大暑 初候)
+三伏: 中伏第1天
+```
+
+Every field is a function of the day alone, never of a time of day — the ones
+that would be (`time_yi`, `time_chong`) are deliberately absent, since this tool
+keeps no clock. `-a` is refused together with `-f`: the profile and the block are
+two shapes of the same answer, and `-f` is already the one that takes over.
 
 ## `lunar cal`
 
@@ -341,7 +412,7 @@ purpose with the reason for each.
 
 | path | role |
 |---|---|
-| `src/calendar.rs` | the `lunar-rs` boundary: range checks, solar↔lunar conversion, ganzhi, festivals, solar terms, statutory holidays |
+| `src/calendar.rs` | the `lunar-rs` boundary: range checks, solar↔lunar conversion, ganzhi, festivals, solar terms, 星座, the 黄历 block, statutory holidays |
 | `src/civil.rs` | proleptic-Gregorian epoch math and date stepping, which `lunar-rs` cannot provide because its `Solar` models the 1582 reform |
 | `src/calgrid.rs` | grid layout; cells are padded by **display width** (`src/lang.rs`), not character count, so CJK cells align |
 | `src/cell.rs` | the cell content priority (节日 > 初一显示月份名 > 节气 > 农历日) |

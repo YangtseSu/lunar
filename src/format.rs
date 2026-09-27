@@ -16,6 +16,7 @@
 //! | `%D`  | 干支日 (辛巳) |
 //! | `%S`  | 生肖 (马) |
 //! | `%Q`  | 节气, empty when the day has none |
+//! | `%Z`  | 星座 (处女) |
 //! | `%%`  | literal `%` |
 //!
 //! `\` escapes the next character and yields it: `\n` a newline, `\t` a tab,
@@ -82,6 +83,7 @@ pub fn expand(format: &str, solar: Solar, out: &mut String) {
                             out.push_str(&term);
                         }
                     }
+                    'Z' => out.push_str(calendar::xing_zuo(&solar)),
                     '%' => out.push('%'),
                     other => {
                         out.push('%');

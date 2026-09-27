@@ -8,7 +8,8 @@ display, query and convert the Chinese lunisolar calendar, through two
 subcommands modelled on the Unix tools they are named after:
 
 - **`lunar date`** — one day's almanac (公历 / 星期 / 农历 / 干支 / 生肖 / 节气 /
-  法定), with `date(1)`-style input (`-d`) and a `-f` format engine;
+  法定 / 星座), with `date(1)`-style input (`-d`), a `-f` format engine and a
+  `-a` 黄历 block;
 - **`lunar cal`** — `cal(1)`-style month and year grids overlaid with lunar days,
   solar terms, festivals and the statutory calendar, over civil months or, with
   `-L`, lunar months.
@@ -194,6 +195,16 @@ Invariants, in the order they are easiest to break:
 - **Adding a `-f` token:** extend the `match` in `format.rs` **and** all three
   tables — the module doc, `FORMAT_HELP` (`src/main.rs`) and the README table.
   `--help-format` must list every token; the suite checks it does.
+- **The 黄历 is one block, and `-a` is its only switch.** `calendar::almanac`
+  builds the whole set of `label: text` lines; there is no per-group flag and
+  none may be added — a reader asking for 冲煞 gets 冲煞, not a fifth of the
+  answer. Two groups are seasonal (`shu_jiu`, `fu`) and their lines are
+  **omitted** when the engine has no value, the same way the `节气` line is. The
+  block is `conflicts_with = "format"`: the profile, the block and `-f` are three
+  shapes of one answer, and only one of them prints. A field that depends on a
+  time of day (`time_yi`, `time_chong`) is out of scope by the no-clock rule, and
+  `lunar cal` never shows the block — a cell has room for a label, not a
+  黄历.
 - **Adding a `cal` flag:** map it to `CellStyle` in `cal::run`, the single seam;
   do not grow a second configuration path.
 - **Span semantics are `cal(1)`'s, and `span_of` is the one place they live.**

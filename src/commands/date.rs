@@ -1,6 +1,6 @@
 //! `lunar date` — one day's Chinese almanac profile.
 //!
-//! Without `-f` it prints the standard five-line day profile:
+//! Without `-f` it prints the standard day profile:
 //!
 //! ```text
 //! 公历: 2026年9月7日 星期一
@@ -8,11 +8,17 @@
 //! 干支: 丙午 丙申 甲申
 //! 生肖: 马
 //! 节气: 白露
+//! 星座: 处女
 //! ```
 //!
 //! The `节气` line disappears when the day carries no solar term, and a
 //! `法定: 中秋节 放假` / `法定: 中秋节 调休上班` line appears only when the
-//! day is on the statutory calendar.
+//! day is on the statutory calendar. The `星座` line is last and never absent:
+//! a constellation is a function of the civil month and day alone.
+//!
+//! `-a` / `--almanac` appends the 黄历 block for the day — 宜忌, 冲煞, 神煞,
+//! 星宿, 纳音, 方位 and 物候 — after the profile. It is refused with `-f`,
+//! since the two are two shapes of the same answer.
 //!
 //! The day is a **civil** one by default; `-l` reads the same three positionals
 //! as lunar instead, and `-R` picks the leap month, so `date -l 2020 4 1 -R`
@@ -20,7 +26,7 @@
 
 use std::fmt::Write as _;
 
-use lunar_rs::Solar;
+use lunar_rs::{Lunar, Solar};
 
 use crate::calendar::{self, CalError};
 use crate::civil::CivilDate;
@@ -34,6 +40,8 @@ pub struct DateArgs {
     pub date: Option<String>,
     /// `-f`: a custom format string.
     pub format: Option<String>,
+    /// `-a`: append the 黄历 block after the profile.
+    pub almanac: bool,
     /// `-l`: read the positionals as a lunar date.
     pub lunar: bool,
     /// `-R`: with `-l`, select the leap month.
@@ -52,6 +60,9 @@ pub fn run(args: &DateArgs, today: CivilDate, out: &mut String) -> Result<(), Ca
         out.push('\n');
     } else {
         write_profile(solar, out);
+        if args.almanac {
+            write_almanac(&solar.lunar(), out);
+        }
     }
     Ok(())
 }
@@ -102,7 +113,7 @@ fn number(text: &str) -> Result<i32, CalError> {
     })
 }
 
-/// The default five-line profile.
+/// The default day profile.
 fn write_profile(solar: Solar, out: &mut String) {
     let lunar = solar.lunar();
     let _ = writeln!(
@@ -136,5 +147,17 @@ fn write_profile(solar: Solar, out: &mut String) {
     // what it is called, and no other line of the profile says either.
     if let Some(line) = calendar::legal_holiday_line(&solar) {
         let _ = writeln!(out, "{line}");
+    }
+    // The constellation closes the profile: it is the only line that is
+    // neither a calendar fact nor a statutory one, it is last so that nothing
+    // conditional can push it around, and it is never absent — unlike `节气`
+    // and `法定`, it has no day it fails to have.
+    let _ = writeln!(out, "星座: {}", calendar::xing_zuo(&solar));
+}
+
+/// Appends the 黄历 block, one `label: text` line per group.
+fn write_almanac(lunar: &Lunar, out: &mut String) {
+    for text in calendar::almanac(lunar) {
+        let _ = writeln!(out, "{text}");
     }
 }
