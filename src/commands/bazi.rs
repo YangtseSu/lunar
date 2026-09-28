@@ -73,7 +73,24 @@
 //!
 //! Without `-g` the four pillars still print, and a `说明` line says what is
 //! missing — the same answer a birth moment with no clock gets, three pillars
-//! instead of four. 流年 and 小运 are a layer below the steps and are not here.
+//! instead of four.
+//!
+//! The years under those steps are a **query**, not more chart: `-y` names
+//! one of them, because ten steps hold a hundred 流年 and a hundred 小运 and
+//! printing all of them would bury the chart they belong to.
+//!
+//! ```text
+//! $ lunar bazi 1990-06-15T10:30 -g 男 -y 2015 | tail -3
+//! 流年: 2015年 乙未  26岁  旬空 辰巳
+//! 流月: 戊寅(正月) / 己卯(二月) / 庚辰(三月) / 辛巳(四月) / 壬午(五月) / 癸未(六月) / 甲申(七月) / 乙酉(八月) / 丙戌(九月) / 丁亥(十月) / 戊子(冬月) / 己丑(腊月)
+//! 小运: 己未 26岁
+//! ```
+//!
+//! Two of the three need something the chart may not have, and both are
+//! reported the way 命宫 / 身宫 are. The 流年 is counted on 大运, so no gender
+//! means no 流年; and the 小运 is counted from the 时柱, one step per year, so
+//! a birth moment with no time of day prints the 流年 and says the 小运 is
+//! missing. The 流月 are named in 农历 months, because that is what they are.
 
 use std::fmt::Write as _;
 
@@ -88,6 +105,8 @@ use crate::datestr::{self, Moment};
 pub struct BaziArgs {
     /// `-g`: the gender that decides whether 大运 runs forward or back.
     pub gender: Option<String>,
+    /// `-y`: the civil year whose 流年 / 流月 / 小运 are asked for.
+    pub year: Option<String>,
     /// Positional: one `date(1)` style string, optionally with a time of day.
     pub positional: Vec<String>,
 }
@@ -114,8 +133,27 @@ pub fn run(args: &BaziArgs, today: CivilDate, out: &mut String) -> Result<(), Ca
         hour,
         minute,
     )?;
-    write_chart(&solar, moment.seconds_of_day.is_some(), gender, out);
-    Ok(())
+    // `-y` is a **query**, not part of the chart: it names a year rather than
+    // adding a row to the pillars, and without it a hundred 流年 and a hundred
+    // 小运 would bury the chart they belong to.
+    let year = match &args.year {
+        Some(text) => Some(luck_year_arg(text)?),
+        None => None,
+    };
+    write_chart(&solar, moment.seconds_of_day.is_some(), gender, year, out)
+}
+
+/// The civil year `-y` asks about, range-checked.
+///
+/// It is a year and not a birth moment, so the `-d` grammar is not its
+/// reader: it is one integer, and a year the engine's 运程 arithmetic could
+/// count forward into is refused rather than answered.
+fn luck_year_arg(text: &str) -> Result<i32, CalError> {
+    let year = text.trim().parse::<i32>().map_err(|_| CalError::BadYear {
+        value: text.to_string(),
+    })?;
+    calendar::check_year(year)?;
+    Ok(year)
 }
 
 /// The gender names `-g` accepts, in the forms a user is likely to reach for.
@@ -158,13 +196,19 @@ fn resolve(args: &BaziArgs, today: CivilDate) -> Result<Moment, CalError> {
 }
 
 /// Writes the chart: the pillar rows, then 命局, then 大运 when a gender was
-/// given.
+/// given, then the 流年 of a year `-y` asked about.
 ///
-/// The three sections are separate functions because they answer three
+/// The four sections are separate functions because they answer four
 /// separate questions, and this function has lost a row twice while changing
 /// one of them; `bazi_prints_four_pillars_only_with_a_time` pins the whole
 /// chart, and it is the first thing to read when one goes missing.
-fn write_chart(solar: &Solar, has_time: bool, gender: Option<Gender>, out: &mut String) {
+fn write_chart(
+    solar: &Solar,
+    has_time: bool,
+    gender: Option<Gender>,
+    year: Option<i32>,
+    out: &mut String,
+) -> Result<(), CalError> {
     let (hour, minute) = (solar.hour(), solar.minute());
     let lunar = solar.lunar();
     let _ = writeln!(
@@ -190,6 +234,8 @@ fn write_chart(solar: &Solar, has_time: bool, gender: Option<Gender>, out: &mut 
     write_pillar_rows(&eight, has_time, out);
     write_ming_jun(&eight, has_time, out);
     write_yun(&eight, gender, out);
+    write_luck_year(&eight, has_time, gender, year, out)?;
+    Ok(())
 }
 
 /// How many columns a row about a pillar has: four with a 时柱, three without.
@@ -363,6 +409,76 @@ fn write_yun(eight: &EightChar, gender: Option<Gender>, out: &mut String) {
             let _ = writeln!(out, "大运: {}", steps.join(" / "));
         }
     }
+}
+
+/// Writes the 流年 / 流月 / 小运 of the year `-y` asked about, or the line
+/// saying why there is none.
+///
+/// Three things can be missing and each is reported rather than defaulted:
+/// `-y` was not given (nothing is asked, so nothing prints), no gender (the
+/// 流年 is counted on 大运, and 顺逆 has no default to assume), and a year no
+/// step of 大运 covers — before 起运 or past the tenth step, which is as far
+/// as a chart is排. The 小运 is the fourth case: it is counted from the 时柱,
+/// one step per year, so a birth moment with no time of day has none, the
+/// same choice 命宫 / 身宫 make.
+///
+/// The 流月 are named in 农历 months (`正月` … `冬月` `腊月`), because that is
+/// what they are: a 流月 runs on 农历 months from 立春, so a civil `1月` here
+/// would name a different month. The same words the 农历 line of a day
+/// profile uses.
+fn write_luck_year(
+    eight: &EightChar,
+    has_time: bool,
+    gender: Option<Gender>,
+    year: Option<i32>,
+    out: &mut String,
+) -> Result<(), CalError> {
+    let Some(year) = year else {
+        return Ok(());
+    };
+    let Some(gender) = gender else {
+        // The 流年 is counted on 大运, and 顺逆 is the gender's to decide.
+        let _ = writeln!(out, "说明: 流年需性别");
+        return Ok(());
+    };
+    let yun = calendar::yun(eight, gender);
+    let luck = calendar::luck_year(&yun, year, has_time)?;
+    let Some(luck) = luck else {
+        // Naming the span is the answer: "before 起运" and "past the tenth
+        // step" are different facts, and the two numbers between them are
+        // the whole of what the chart排 covers.
+        let span = calendar::luck_span(&yun);
+        let _ = writeln!(
+            out,
+            "说明: {year} 年无大运 (大运 {}-{})",
+            span.start(),
+            span.end()
+        );
+        return Ok(());
+    };
+    let _ = writeln!(
+        out,
+        "流年: {}年 {}  {}岁  旬空 {}",
+        luck.year(),
+        luck.gan_zhi(),
+        luck.age(),
+        luck.xun_kong()
+    );
+    let months: Vec<String> = luck
+        .months()
+        .iter()
+        .map(|month| format!("{}({})", month.gan_zhi(), month.month()))
+        .collect();
+    let _ = writeln!(out, "流月: {}", months.join(" / "));
+    match luck.xiao_yun() {
+        Some(xiao) => {
+            let _ = writeln!(out, "小运: {} {}岁", xiao.gan_zhi(), xiao.age());
+        }
+        None => {
+            let _ = writeln!(out, "说明: 小运需时柱");
+        }
+    }
+    Ok(())
 }
 
 /// One pillar's cell, for an attribute the engine lists as several

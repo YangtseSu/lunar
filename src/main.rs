@@ -100,6 +100,10 @@ enum Command {
         #[arg(short = 'g', long = "gender", value_name = "性别")]
         gender: Option<String>,
 
+        /// 查某一年的流年/流月/小运（需 `-g`）
+        #[arg(short = 'y', long = "year", value_name = "年")]
+        year: Option<String>,
+
         /// 生辰，date 风格，可带时刻，如 '1990-06-15T10:30'（缺省为今天）
         #[arg(value_name = "生辰")]
         positional: Vec<String>,
@@ -217,9 +221,14 @@ fn main() -> ExitCode {
             today,
             &mut out,
         ),
-        Command::Bazi { gender, positional } => bazi::run(
+        Command::Bazi {
+            gender,
+            year,
+            positional,
+        } => bazi::run(
             &bazi::BaziArgs {
                 gender: gender.clone(),
+                year: year.clone(),
                 positional: positional.clone(),
             },
             today,

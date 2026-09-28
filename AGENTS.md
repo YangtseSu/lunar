@@ -284,13 +284,31 @@ Invariants, in the order they are easiest to break:
   exits 0 — the same choice a missing time of day makes about the 时柱.
   `calendar::yun` takes `&EightChar`, not `&Lunar`, because `EightChar` borrows
   the `Lunar` it reads.
+- **`-y` is a query about one year, and a chart answers it only when it can.**
+  The 流年 / 流月 / 小运 hang a layer below the ten 大运, and all hundred of
+  each are unreadable by default, so they print for the year `-y` names and for
+  no other. Three facts decide what a run can answer, and each is reported
+  rather than defaulted: the 流年 is counted **on** 大运, so no `-g` means
+  `说明: 流年需性别`; the year must be **owned by a step**, and one before
+  起运 or past the tenth has none, so the year is reported with the span that
+  does (`说明: … 年无大运 (大运 1997-2086)`) instead of a neighbour's value;
+  and the 小运 is counted **from the 时柱** one step per year, so a no-clock
+  chart prints the 流年 and 流月 and says `说明: 小运需时柱`. That is the
+  命宫 / 身宫 rule, for the same reason: the engine would answer from the noon
+  this tool substitutes, and a noon is not the moment asked about. The 流月
+  are named in 农历 months (`正月` … `冬月` `腊月`) — a 流月 runs on 农历
+  months from 立春, so a civil `1月` there would name a different month. The
+  engine's index-0 step (the span up to 起运) carries a 流年 and is **skipped**:
+  a chart has no 大运 pillar for those years to sit on. `-y` takes a bare
+  integer, not a `-d` string — it is a year, not a moment — and is range-checked
+  to 1–9999 before the 运程 arithmetic runs.
 - **`bazi`'s `write_chart` is a dispatcher, not a sequence of `writeln!`
   calls, and that is load-bearing.** As one function it had lost a row twice in
   three rounds of change, caught only because the suite pins the whole chart
   byte-for-byte. It is split into `write_pillar_rows` / `write_ming_jun` /
-  `write_yun`, and the column count that trims a three-pillar chart to three
-  cells lives in exactly one place, `column_count`. Keep it that way. When
-  editing it, the pinned chart in
+  `write_yun` / `write_luck_year`, and the column count that trims a
+  three-pillar chart to three cells lives in exactly one place, `column_count`.
+  Keep it that way. When editing it, the pinned chart in
   `bazi_prints_four_pillars_only_with_a_time` is the contract — if the output
   is meant to change, that test is what must be updated first, never after the
   fact.

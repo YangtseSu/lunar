@@ -9,7 +9,8 @@ use std::sync::Arc;
 
 use lunar_rs::solar_util;
 use lunar_rs::{
-    EightChar, Gender, Holiday, Lunar, LunarFestival, LunarMonth, LunarYear, Solar, Yun,
+    DaYun, EightChar, Gender, Holiday, LiuNian, Lunar, LunarFestival, LunarMonth, LunarYear, Solar,
+    Yun,
 };
 
 use crate::civil::CivilDate;
@@ -90,6 +91,10 @@ pub enum CalError {
     ///
     /// Carries the text as written, so the message can quote it back.
     BadGender { value: String },
+    /// A `-y` value that is not a civil year, as `lunar bazi` reads it.
+    ///
+    /// Carries the text as written, so the message can quote it back.
+    BadYear { value: String },
     /// A positional argument that is not a number, or one too many of them.
     /// Carries the offending text, empty when the count is what is wrong.
     BadArgument { detail: String },
@@ -144,6 +149,9 @@ impl CalError {
             }
             Self::BadGender { value } => {
                 format!("性别 {value} 无法识别 (应为 男/女，或 male/female)")
+            }
+            Self::BadYear { value } => {
+                format!("年份 {value} 无法解析 (应为 {MIN_YEAR}–{MAX_YEAR} 的公历年)")
             }
             Self::UnparsableDate { input } => format!("无法解析的日期: {input}"),
             Self::BadTimeZone { source } => format!("无法读取时区: {source}"),
@@ -291,6 +299,200 @@ pub fn yun<'a>(eight: &'a EightChar<'a>, gender: Gender) -> Yun<'a> {
 /// day pillar does not move to the next day at 23:00, and 起运 is counted in
 /// minutes. Both are registered in `docs/parity.md`.
 const YUN_SECT: u8 = 2;
+
+/// The civil years a chart's 大运 covers: the first step's first year through
+/// the last step's last year.
+///
+/// Ten steps is as far as a chart is排, so a year outside this span is one the
+/// chart has no luck for. Naming the span answers the follow-up question —
+/// "then when does it start?" — without making a reader count the `大运:` row.
+pub struct LuckSpan {
+    start: i32,
+    end: i32,
+}
+
+impl LuckSpan {
+    /// First civil year a step of 大运 covers.
+    pub fn start(&self) -> i32 {
+        self.start
+    }
+
+    /// Last civil year the last step of 大运 covers.
+    pub fn end(&self) -> i32 {
+        self.end
+    }
+}
+
+/// The span of civil years [`luck_year`] is asked about.
+pub fn luck_span(yun: &Yun) -> LuckSpan {
+    let steps: Vec<_> = yun
+        .da_yun()
+        .into_iter()
+        .filter(|d| d.index() >= 1)
+        .collect();
+    LuckSpan {
+        start: steps.first().map_or(0, |d| d.start_year()),
+        end: steps.last().map_or(0, |d| d.end_year()),
+    }
+}
+
+/// One civil year as a chart's 运程 sees it: the 流年 pillar, the twelve 流月
+/// under it, and the 小运 the year stands on.
+///
+/// A year only has a 流年 when a step of 大运 owns it. The engine also counts
+/// 流年 over the span *before* the first step, where no 大运 pillar exists, and
+/// those years are not answered here: a chart has nothing for them to sit on.
+pub struct LuckYear {
+    year: i32,
+    gan_zhi: String,
+    age: i32,
+    xun_kong: String,
+    months: Vec<StreamMonth>,
+    xiao_yun: Option<StreamStep>,
+}
+
+impl LuckYear {
+    /// The civil year these values answer for.
+    pub fn year(&self) -> i32 {
+        self.year
+    }
+
+    /// The 流年 pillar: `乙未`.
+    pub fn gan_zhi(&self) -> &str {
+        &self.gan_zhi
+    }
+
+    /// The age the chart counts that year at, 虚岁.
+    pub fn age(&self) -> i32 {
+        self.age
+    }
+
+    /// The 流年's 旬空: `辰巳`.
+    pub fn xun_kong(&self) -> &str {
+        &self.xun_kong
+    }
+
+    /// The year's twelve 流月, in calendar order.
+    pub fn months(&self) -> &[StreamMonth] {
+        &self.months
+    }
+
+    /// The 小运 that year stands on, or `None` for a chart with no 时柱.
+    ///
+    /// The 小运 is counted from the 时柱, one step per year, so a birth moment
+    /// with no time of day has nothing to count it from; see [`luck_year`].
+    pub fn xiao_yun(&self) -> Option<&StreamStep> {
+        self.xiao_yun.as_ref()
+    }
+}
+
+/// One of a year's twelve 流月: a pillar and the 农历 month it answers for.
+pub struct StreamMonth {
+    gan_zhi: String,
+    month: String,
+}
+
+impl StreamMonth {
+    /// The 流月 pillar: `戊寅`.
+    pub fn gan_zhi(&self) -> &str {
+        &self.gan_zhi
+    }
+
+    /// The 农历 month name, the same words the 农历 line uses: `正月` …
+    /// `十月` `冬月` `腊月`.
+    pub fn month(&self) -> &str {
+        &self.month
+    }
+}
+
+/// One step of a 小运: the pillar a year stands on and the age that year is
+/// counted at. The 小运 is one year per step, so unlike a 大运 it covers
+/// exactly the year it is asked for and has no span to print.
+pub struct StreamStep {
+    gan_zhi: String,
+    age: i32,
+}
+
+impl StreamStep {
+    /// The pillar: `己未`.
+    pub fn gan_zhi(&self) -> &str {
+        &self.gan_zhi
+    }
+
+    /// The age that year is counted at, 虚岁.
+    pub fn age(&self) -> i32 {
+        self.age
+    }
+}
+
+/// A civil year's 流年, 流月 and 小运 on a chart that has 大运.
+///
+/// The year is located by the same span the 大运 row prints, and a year that
+/// no step owns is reported rather than answered with a neighbour's value: the
+/// 流年 of a year before 起运 is a real fact, but the nearest step's would be
+/// a value about a different year.
+///
+/// The 小运 needs a 時辰 — it is counted from the 时柱, one step per year —
+/// and the engine would answer from whatever clock the caller happened to
+/// substitute. A birth moment with no time of day has no 时柱 to count it
+/// from, so it is `None` here and the caller says so; the same "an answer
+/// about a noon nobody asked for" that the 命宫 / 身宫 row refuses.
+///
+/// `year` is range-checked against 1–9999 first: the 运程 arithmetic counts
+/// forward a hundred years without consulting the calendar, so an unchecked
+/// year would name a 流年 for a year the tool cannot otherwise print.
+pub fn luck_year(yun: &Yun, year: i32, has_time: bool) -> Result<Option<LuckYear>, CalError> {
+    check_year(year)?;
+    let step = yun.da_yun().into_iter().find(|d| {
+        // Index 0 is the span that runs up to 起运: the engine counts 流年
+        // there too, and it is a real year, but no step of 大运 stands behind
+        // it. `luck_span` starts at the first step, so skipping it here keeps
+        // the two in one answer.
+        d.index() >= 1 && d.start_year() <= year && year <= d.end_year()
+    });
+    let Some(step) = step else {
+        return Ok(None);
+    };
+    let Some(flow) = step.liu_nian().into_iter().find(|l| l.year() == year) else {
+        return Ok(None);
+    };
+    Ok(Some(LuckYear {
+        year,
+        gan_zhi: flow.gan_zhi(),
+        age: flow.age(),
+        xun_kong: flow.xun_kong().to_string(),
+        months: stream_months(&flow),
+        xiao_yun: stream_xiao_yun(&step, year, has_time),
+    }))
+}
+
+/// The twelve 流月 of a 流年, each with the 农历 month it answers for.
+///
+/// The names are the engine's, and they are 农历 month names — `正` … `十`
+/// `冬` `腊` — not civil ones: a 流月 runs on 农历 months from 立春, so
+/// printing `1月` there would name a different month. The 月 suffix is this
+/// tool's, the same one [`lunar_month_name`] adds to the 农历 line.
+fn stream_months(flow: &LiuNian) -> Vec<StreamMonth> {
+    flow.liu_yue()
+        .iter()
+        .map(|month| StreamMonth {
+            gan_zhi: month.gan_zhi(),
+            month: format!("{}月", month.month_in_chinese()),
+        })
+        .collect()
+}
+
+/// The 小运 the year stands on, or `None` for a chart with no 时柱.
+fn stream_xiao_yun(step: &DaYun, year: i32, has_time: bool) -> Option<StreamStep> {
+    if !has_time {
+        return None;
+    }
+    let xiao = step.xiao_yun().into_iter().find(|x| x.year() == year)?;
+    Some(StreamStep {
+        gan_zhi: xiao.gan_zhi(),
+        age: xiao.age(),
+    })
+}
 
 /// Whether `month` is a lunar month number: `1..=12`, a negative number
 /// standing for the leap month of that ordinal.

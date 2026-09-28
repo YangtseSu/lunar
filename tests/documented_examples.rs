@@ -3211,3 +3211,127 @@ fn the_luck_rows_sit_after_the_pillars() {
         lines[start]
     );
 }
+
+/// `-y` asks about one year rather than adding a row to the chart, and the
+/// 流年 / 流月 / 小运 it answers with are that year's — 26岁 of a 1990 birth is
+/// 2015, not the birth year. A hundred 流年 and a hundred 小运 would bury the
+/// chart they belong to, so nothing of the sort prints without the flag.
+#[test]
+fn a_year_prints_its_luck_year_and_months() {
+    let chart = run(&["bazi", "1990-06-15T10:30", "-g", "男", "-y", "2015"]);
+    let mut lines = chart.lines();
+    let flow = lines.next_back().expect("a 小运 line");
+    let months = lines.next_back().expect("a 流月 line");
+    let year = lines.next_back().expect("a 流年 line");
+    assert_eq!(year, "流年: 2015年 乙未  26岁  旬空 辰巳");
+    // Twelve months, named in 农历 months — a 流月 runs on 农历 months from
+    // 立春, so a civil `1月` here would name a different month.
+    assert_eq!(months.split(" / ").count(), 12, "{months}");
+    assert!(
+        months.starts_with("流月: 戊寅(正月) / 己卯(二月) / "),
+        "{months}"
+    );
+    assert!(
+        months.ends_with("丁亥(十月) / 戊子(冬月) / 己丑(腊月)"),
+        "{months}"
+    );
+    // The 小运 moves one step per year and is counted from the 时柱, so it is
+    // a different pillar from the 流年 of the same year — and it follows the
+    // gender's direction, which is what the 大运 run does.
+    assert_eq!(flow, "小运: 己未 26岁");
+    assert!(
+        !chart.contains("流年: 2014"),
+        "one year, one 流年:\n{chart}"
+    );
+}
+
+/// A 流年 is counted on 大运, and 顺逆 is the gender's to decide — so its
+/// absence is reported, not guessed at, exactly as a missing time of day
+/// costs the 时柱.
+#[test]
+fn a_year_without_a_gender_says_so() {
+    let chart = run(&["bazi", "1990-06-15T10:30", "-y", "2015"]);
+    assert!(chart.contains("说明: 流年需性别"), "{chart}");
+    assert!(
+        !chart.contains("流年:"),
+        "no 流年 without a gender:\n{chart}"
+    );
+    assert!(
+        !chart.contains("流月:") && !chart.contains("小运:"),
+        "the whole 运程 query is answered with one line:\n{chart}"
+    );
+}
+
+/// The 小运 is counted from the 时柱, one step per year, so a birth moment
+/// with no time of day has none to count it from. The engine would still
+/// answer — from the noon this tool substitutes internally — and that noon is
+/// a value about noon, so it is left out and said to be, like 命宫 / 身宫.
+#[test]
+fn the_luck_year_needs_no_time_but_the_luck_step_does() {
+    let no_clock = run(&["bazi", "1990-06-15", "-g", "男", "-y", "2015"]);
+    // 流年 and 流月 are a function of the year and the 大运, not of the clock.
+    assert!(
+        no_clock.contains("流年: 2015年 乙未  26岁  旬空 辰巳"),
+        "{no_clock}"
+    );
+    assert!(
+        no_clock.contains("流月: 戊寅(正月) / 己卯(二月) / "),
+        "{no_clock}"
+    );
+    assert!(no_clock.contains("说明: 小运需时柱"), "{no_clock}");
+    assert!(
+        !no_clock.contains("小运:"),
+        "no 小运 without a 时柱:\n{no_clock}"
+    );
+    // With a 时柱 the chart names the step, and it is not the 流年's pillar.
+    let timed = run(&["bazi", "1990-06-15T10:30", "-g", "男", "-y", "2015"]);
+    assert!(timed.contains("小运: 己未 26岁"), "{timed}");
+    // The other direction counts the other way, so the two must not agree.
+    let woman = run(&["bazi", "1990-06-15T10:30", "-g", "女", "-y", "2015"]);
+    assert!(woman.contains("小运: 丁卯 26岁"), "{woman}");
+}
+
+/// The 流年 of a year the chart's ten steps do not cover is reported with the
+/// span that does — never answered with the nearest step's value, which would
+/// be a fact about a different year.
+#[test]
+fn the_luck_year_sits_in_the_step_that_owns_it() {
+    // 起运 is 1997-11-17 and the tenth step ends in 2086, so 1996 is before
+    // the first step and 2087 is past the last.
+    for year in ["1996", "2087"] {
+        let chart = run(&["bazi", "1990-06-15T10:30", "-g", "男", "-y", year]);
+        assert!(
+            chart.contains(&format!("说明: {year} 年无大运 (大运 1997-2086)")),
+            "{chart}"
+        );
+        assert!(!chart.contains("流年:"), "no value for {year}:\n{chart}");
+    }
+    // The first and last years the steps do cover are 流年 of their own, on
+    // the first and last step respectively.
+    let first = run(&["bazi", "1990-06-15T10:30", "-g", "男", "-y", "1997"]);
+    assert!(
+        first.contains("流年: 1997年 丁丑  8岁  旬空 申酉"),
+        "{first}"
+    );
+    let last = run(&["bazi", "1990-06-15T10:30", "-g", "男", "-y", "2086"]);
+    assert!(
+        last.contains("流年: 2086年 丙午  97岁  旬空 寅卯"),
+        "{last}"
+    );
+}
+
+/// `-y` is a year, not a birth moment: the `-d` grammar is not its reader, and
+/// a year outside the engine's window is refused rather than counted into.
+#[test]
+fn a_luck_year_outside_the_range_is_reported() {
+    for (arg, want) in [
+        ("0", "年份 0 超出支持范围 (1–9999)"),
+        ("10000", "年份 10000 超出支持范围 (1–9999)"),
+        ("abc", "年份 abc 无法解析"),
+    ] {
+        assert!(
+            run_failing(&["bazi", "1990-06-15T10:30", "-g", "男", "-y", arg]).contains(want),
+            "`-y {arg}` is refused with {want:?}"
+        );
+    }
+}

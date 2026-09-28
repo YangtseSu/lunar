@@ -522,7 +522,93 @@ Ten steps. The 起运 is printed as a date **and** the whole interval it took �
 differing. A 起运 shorter than a year is printed as it is, not treated as an
 anomaly, and a zero tail is left out rather than written `0天0小时`.
 
-流年 and 小运 are not here; they are a layer below the steps.
+### 流年 / 流月 / 小运
+
+`大运` is the chart; the years under it are a **query**, so `-y` / `--year`
+names one of them instead of printing all hundred. Ten steps × ten years plus
+ten 小运 per step is unreadable by default, and "which year" is a different
+question from "which chart":
+
+```console
+$ lunar bazi 1990-06-15T10:30 -g 男 -y 2015
+公历: 1990年6月15日 10:30
+农历: 庚午年五月廿三
+八字: 庚午 / 壬午 / 辛亥 / 癸巳
+十神: 劫财 / 伤官 / 日主 / 食神
+藏干: 丁己 / 丁己 / 壬甲 / 丙庚戊
+纳音: 路旁土 / 杨柳木 / 钗钏金 / 长流水
+地势: 病 / 病 / 沐浴 / 死
+五行: 金火 / 水火 / 金水 / 水火
+旬空: 戌亥 / 申酉 / 寅卯 / 午未
+地支十神: 七杀偏印 / 七杀偏印 / 伤官正财 / 正官劫财正印
+命局: 胎元 癸酉(剑锋金) / 胎息 丙寅(炉中火) / 命宫 壬午(杨柳木) / 身宫 戊子(霹雳火)
+起运: 1997年11月17日  (出生后 7年5月2天12小时)  顺行
+大运: 8-17 癸未 / 18-27 甲申 / 28-37 乙酉 / 38-47 丙戌 / 48-57 丁亥 / 58-67 戊子 / 68-77 己丑 / 78-87 庚寅 / 88-97 辛卯
+流年: 2015年 乙未  26岁  旬空 辰巳
+流月: 戊寅(正月) / 己卯(二月) / 庚辰(三月) / 辛巳(四月) / 壬午(五月) / 癸未(六月) / 甲申(七月) / 乙酉(八月) / 丙戌(九月) / 丁亥(十月) / 戊子(冬月) / 己丑(腊月)
+小运: 己未 26岁
+```
+
+Three rules shape what prints, and each is reported rather than defaulted:
+**`-y` needs `-g`**, because the 流年 is counted on 大运 and 顺逆 is the
+gender's to decide; without one the chart says `说明: 流年需性别` and the
+pillars are the whole answer. **A year no step covers is named, not
+approximated** — the ten steps run from the 起运 year to a century on, and
+before it or after it there is no 大运 to sit on, so the year is reported
+with the span that does:
+
+```console
+$ lunar bazi 1990-06-15T10:30 -g 男 -y 1996
+公历: 1990年6月15日 10:30
+农历: 庚午年五月廿三
+八字: 庚午 / 壬午 / 辛亥 / 癸巳
+十神: 劫财 / 伤官 / 日主 / 食神
+藏干: 丁己 / 丁己 / 壬甲 / 丙庚戊
+纳音: 路旁土 / 杨柳木 / 钗钏金 / 长流水
+地势: 病 / 病 / 沐浴 / 死
+五行: 金火 / 水火 / 金水 / 水火
+旬空: 戌亥 / 申酉 / 寅卯 / 午未
+地支十神: 七杀偏印 / 七杀偏印 / 伤官正财 / 正官劫财正印
+命局: 胎元 癸酉(剑锋金) / 胎息 丙寅(炉中火) / 命宫 壬午(杨柳木) / 身宫 戊子(霹雳火)
+起运: 1997年11月17日  (出生后 7年5月2天12小时)  顺行
+大运: 8-17 癸未 / 18-27 甲申 / 28-37 乙酉 / 38-47 丙戌 / 48-57 丁亥 / 58-67 戊子 / 68-77 己丑 / 78-87 庚寅 / 88-97 辛卯
+说明: 1996 年无大运 (大运 1997-2086)
+```
+
+**The 小运 needs a 时柱.** It is counted from the 时柱, one step per year, and
+a birth moment with no time of day has none to count it from — the same
+choice 命宫 / 身宫 make, and for the same reason. The 流年 and 流月 are a
+function of the year and the 大运, so they still print, and the chart says
+what is missing:
+
+```console
+$ lunar bazi 1990-06-15 -g 男 -y 2015
+公历: 1990年6月15日
+农历: 庚午年五月廿三
+八字: 庚午 / 壬午 / 辛亥
+说明: 未给时刻，无时柱
+十神: 劫财 / 伤官 / 日主
+藏干: 丁己 / 丁己 / 壬甲
+纳音: 路旁土 / 杨柳木 / 钗钏金
+地势: 病 / 病 / 沐浴
+五行: 金火 / 水火 / 金水
+旬空: 戌亥 / 申酉 / 寅卯
+地支十神: 七杀偏印 / 七杀偏印 / 伤官正财
+命局: 胎元 癸酉(剑锋金) / 胎息 丙寅(炉中火)
+说明: 命宫 / 身宫需时柱
+起运: 1997年11月9日  (出生后 7年4月25天)  顺行
+大运: 8-17 癸未 / 18-27 甲申 / 28-37 乙酉 / 38-47 丙戌 / 48-57 丁亥 / 58-67 戊子 / 68-77 己丑 / 78-87 庚寅 / 88-97 辛卯
+流年: 2015年 乙未  26岁  旬空 辰巳
+流月: 戊寅(正月) / 己卯(二月) / 庚辰(三月) / 辛巳(四月) / 壬午(五月) / 癸未(六月) / 甲申(七月) / 乙酉(八月) / 丙戌(九月) / 丁亥(十月) / 戊子(冬月) / 己丑(腊月)
+说明: 小运需时柱
+```
+
+The 流月 are named in 农历 months (`正月` … `冬月` `腊月`), the same words the
+`农历:` line uses, because that is what they are: a 流月 runs on 农历 months
+from 立春, so a civil `1月` there would name a different month. The 小运 is
+one step per year and runs the gender's direction, so it is a different pillar
+from the 流年 beside it — `己未` against `乙未` above, and `丁卯` for the same
+year had the same birth been read as 女.
 
 ## Supported range
 
