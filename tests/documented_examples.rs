@@ -1477,7 +1477,7 @@ fn a_compact_clock_and_a_bare_zone_are_accepted() {
 fn date_profile_matches_documented_output() {
     assert_eq!(
         run(&["date", "-d", "2026-09-07"]),
-        "公历: 2026年9月7日 星期一\n农历: 丙午年七月廿六\n干支: 丙午 丙申 甲申\n生肖: 马\n节气: 白露\n星座: 处女"
+        "公历: 2026年9月7日 星期一\n农历: 丙午年七月廿六\n干支: 丙午 丁酉 甲申\n生肖: 马\n节气: 白露\n星座: 处女"
     );
 }
 
@@ -1499,6 +1499,140 @@ fn date_accepts_positional_year_month_day() {
         run(&["date", "2026", "2", "17"]),
         "公历: 2026年2月17日 星期二\n农历: 丙午年正月初一\n干支: 丙午 庚寅 壬戌\n生肖: 马\n法定: 春节 放假\n星座: 水瓶"
     );
+}
+
+/// The `干支` line and the `宜:` / `忌:` lines describe one day in one
+/// system, so the month pillar the line prints must be the one the advice
+/// is keyed on.
+///
+/// The engine carries two: `month_in_gan_zhi()` turns at the 節氣 *day* and
+/// `month_in_gan_zhi_exact()` at the 節氣 *instant*, and `day_yi` /
+/// `day_ji` key their tables on the first. They disagree on each of the
+/// twelve 節氣 days, so the 節氣 days themselves are where a split basis
+/// shows — those are the days sampled here, not arbitrary ones.
+#[test]
+fn the_month_pillar_is_the_basis_the_advice_is_keyed_on() {
+    // Each entry is a 節氣 day with the month pillar the day before it and
+    // the day after, captured from the binary: the new month is already in
+    // force on the 節氣 day itself, which is the day-granular rule and what
+    // separates this basis from the instant one.
+    for (day, before, on, after) in [
+        ("2026-01-05", "戊子", "己丑", "己丑"),
+        ("2026-02-04", "己丑", "庚寅", "庚寅"),
+        ("2026-03-05", "庚寅", "辛卯", "辛卯"),
+        ("2026-04-05", "辛卯", "壬辰", "壬辰"),
+        ("2026-05-05", "壬辰", "癸巳", "癸巳"),
+        ("2026-06-05", "癸巳", "甲午", "甲午"),
+        ("2026-07-07", "甲午", "乙未", "乙未"),
+        ("2026-08-07", "乙未", "丙申", "丙申"),
+        ("2026-09-07", "丙申", "丁酉", "丁酉"),
+        ("2026-10-08", "丁酉", "戊戌", "戊戌"),
+        ("2026-11-07", "戊戌", "己亥", "己亥"),
+        ("2026-12-07", "己亥", "庚子", "庚子"),
+    ] {
+        assert_eq!(
+            run(&["date", "-d", day, "-f", "%H"]),
+            on,
+            "{day}: its own month"
+        );
+        assert_ne!(before, on, "{day}: the month turns *on* the 節氣 day");
+        assert_eq!(after, on, "{day}: and it is still in force the day after");
+    }
+    // `%H` and the `干支` line share `calendar::month_gan_zhi`; a change that
+    // moves one and not the other is invisible in either output alone.
+    for day in ["2026-02-04", "2026-09-07", "2026-12-07"] {
+        let profile = run(&["date", "-d", day]);
+        let printed: Vec<&str> = profile
+            .lines()
+            .find_map(|l| l.strip_prefix("干支: "))
+            .unwrap_or_else(|| panic!("{day}: a 干支 line in\n{profile}"))
+            .split(' ')
+            .collect();
+        assert_eq!(
+            printed[1],
+            run(&["date", "-d", day, "-f", "%H"]),
+            "{day}: the 干支 line's month pillar is %H's"
+        );
+    }
+    // 2026-02-04 is 立春. The `干支` line has turned to 丙午 while `%G` —
+    // the lunar year, which turns at 春节 — is still 乙巳: the two bases
+    // genuinely differ on this day, and each line reports the one that
+    // belongs to it. The published almanac reads 丙午年 庚寅月 己酉日.
+    let profile = run(&["date", "-d", "2026-02-04"]);
+    assert!(
+        profile.contains("农历: 乙巳年腊月十七"),
+        "the lunar year keeps the 春节 basis: {profile}"
+    );
+    assert!(
+        profile.contains("干支: 丙午 庚寅 己酉"),
+        "the 干支 line is the 立春 chain: {profile}"
+    );
+    assert_eq!(run(&["date", "-d", "2026-02-04", "-f", "%G"]), "乙巳");
+    let almanac = run(&["date", "-a", "-d", "2026-02-04"]);
+    assert!(
+        almanac.contains("宜: 祭祀、祈福、求嗣、开光、出火、出行"),
+        "{almanac}"
+    );
+    assert!(almanac.contains("忌: 嫁娶、作灶、安床"), "{almanac}");
+}
+
+/// The three pillars of the `干支` line share one basis, so the month stem
+/// must be the 五虎遁 one for the year stem printed beside it.
+///
+/// The month counts from 立春, which is where the 干支 year turns; the 春节
+/// basis belongs to the `农历:` line, which names the lunar year itself.
+/// Pairing a 春节 year stem with a 立春 month stem produces pairs the two
+/// pillars can never form — `乙巳 庚寅` is not a year a 庚寅 month can be
+/// in — so the line would contradict itself on the few days each year where
+/// the two bases disagree.
+#[test]
+fn the_gan_zhi_line_is_one_self_consistent_chain() {
+    const STEMS: [char; 10] = ['甲', '乙', '丙', '丁', '戊', '己', '庚', '辛', '壬', '癸'];
+    const BRANCHES: [char; 12] = [
+        '子', '丑', '寅', '卯', '辰', '巳', '午', '未', '申', '酉', '戌', '亥',
+    ];
+    for day in [
+        "2020-01-25",
+        "2021-02-03",
+        "2024-02-04",
+        "2025-01-29",
+        "2026-01-04",
+        "2026-02-03",
+        "2026-02-04",
+        "2026-02-05",
+    ] {
+        let profile = run(&["date", "-d", day]);
+        let line = profile
+            .lines()
+            .find_map(|l| l.strip_prefix("干支: "))
+            .unwrap_or_else(|| panic!("{day}: a 干支 line in\n{profile}"));
+        let printed: Vec<&str> = line.split(' ').collect();
+        assert_eq!(printed.len(), 3, "{day}: three pillars, got {line:?}");
+        let (year, month) = (printed[0], printed[1]);
+        // 五虎遁: 甲己起丙寅, 乙庚起戊寅, 丙辛起庚寅, 丁壬起壬寅, 戊癸起甲寅.
+        let stem = year.chars().next().expect("a year stem");
+        let branch = month.chars().nth(1).expect("a month branch");
+        let yin_stem = 2 * (STEMS.iter().position(|s| *s == stem).expect("a stem") % 5) + 2;
+        let months_on = (BRANCHES
+            .iter()
+            .position(|b| *b == branch)
+            .expect("a branch")
+            + 10)
+            % 12;
+        let expected = STEMS[(yin_stem + months_on) % 10];
+        assert_eq!(
+            month.chars().next(),
+            Some(expected),
+            "{day}: 五虎遁 under {year} gives a month starting {expected}, engine says {month}"
+        );
+        // The day pillar is unaffected by the basis question, but it has to
+        // be there: a two-pillar line would pass the check above silently.
+        assert_eq!(
+            printed[2].chars().count(),
+            2,
+            "{day}: a two-character day pillar"
+        );
+    }
 }
 
 /// The 星座 line closes the profile and is never missing: a constellation is
@@ -1653,7 +1787,7 @@ fn date_format_covers_every_documented_token() {
             "-d",
             "2026-09-07"
         ]),
-        "2026|09|07|一|丙午|七月|廿六|26|丙申|甲申|马|白露|处女|%"
+        "2026|09|07|一|丙午|七月|廿六|26|丁酉|甲申|马|白露|处女|%"
     );
 }
 

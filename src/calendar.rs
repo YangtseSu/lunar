@@ -295,18 +295,45 @@ pub fn days_in_civil_month(year: i32, month: i32) -> i32 {
     solar_util::days_of_month(year, month)
 }
 
-/// GanZhi of the lunar year: `丙午`.
+/// GanZhi of the **lunar** year: `丙午` — the 春节 basis.
+///
+/// A lunar year turns at 春节, not at 立春, so this is the pillar that
+/// names the 农历 year itself, and it is what the `农历:` line, `%G`, the
+/// 生肖 and the `cal` lunar titles all report. The 干支 chain uses the
+/// other basis; see [`li_chun_year_gan_zhi`].
 pub fn year_gan_zhi(lunar: &Lunar) -> String {
     lunar.year_in_gan_zhi()
 }
 
-/// GanZhi of the lunar **month** pillar.
+/// GanZhi of the lunar **month** pillar, as the 黄历 numbers it.
 ///
-/// A lunar almanac numbers months from 正月 (`寅`) onwards, which is the
-/// traditional 月柱; it is independent of the solar-term instant rule
-/// (`Lunar::month_in_gan_zhi`).
+/// This is the day-granular pillar: the month turns at the 節氣 *day*, so
+/// the whole of that day already belongs to the new month. It is also the
+/// pillar `Lunar::day_yi` and `Lunar::day_ji` key their 宜 / 忌 tables on
+/// (`day_yi_by_sect(1)`), so printing it is what keeps the `干支` line and
+/// the `宜:` / `忌:` lines describing the same day in one system.
+///
+/// The engine also offers `month_in_gan_zhi_exact()`, which turns at the
+/// 節氣 *instant* and therefore disagrees on each of the twelve 節氣 days.
+/// Both are correct answers to different questions; the almanac takes the
+/// day-granular one, and so does this wrapper.
 pub fn month_gan_zhi(lunar: &Lunar) -> String {
-    lunar.month_in_gan_zhi_exact()
+    lunar.month_in_gan_zhi()
+}
+
+/// GanZhi of the year pillar as the `干支` line numbers it: the 立春 basis.
+///
+/// The month pillar counts from 立春, so the month stem that goes with it
+/// is the one 五虎遁 derives from the *立春* year stem; a 春节 year stem
+/// paired with a 立春 month stem is a pair the two pillars can never form.
+/// Over 公元 1–9999 this basis is self-consistent on every day, which the
+/// 春节 basis is not for 74,948 of them.
+///
+/// [`year_gan_zhi`] is the other basis, and it is what the `农历:` line, the
+/// `%G` token and the `cal` lunar titles use: a lunar year turns at 春节,
+/// and those three name the lunar year itself rather than the 干支 chain.
+pub fn li_chun_year_gan_zhi(lunar: &Lunar) -> String {
+    lunar.year_in_gan_zhi_by_li_chun()
 }
 
 /// GanZhi of the day pillar: `甲申`.

@@ -71,6 +71,18 @@ written down:
 - **A 5-digit year is not a range error**: `date -d 10000-01-01` falls out of the
   grammar as unparsable, while `cal 10000` fails the range check. Both are
   correct; do not "fix" one into the other.
+- **The 干支 line is one chain, and it is not the lunar year.** Two engine
+  month pillars exist and both are correct: `month_in_gan_zhi()` turns at the
+  節氣 **day**, `month_in_gan_zhi_exact()` at the 節氣 **instant**; they differ
+  on each of the twelve 節氣 days (119,988 in 1–9999). `Lunar::day_yi` and
+  `day_ji` key their 宜 / 忌 tables on the first, so the `干支:` line prints it
+  — anything else makes the line and the advice contradict each other. The
+  month stem comes from 五虎遁 off the **立春** year stem, so that line's year
+  pillar is `year_in_gan_zhi_by_li_chun()`, not `year_in_gan_zhi()`; mixing
+  bases emits pairs 五虎遁 cannot produce (74,948 days in 1–9999). The 农历
+  line, `%G`, `%S` and the `cal -L` titles keep the **春节** basis: they name
+  the lunar year, not the 干支 chain, and the two legitimately differ between
+  春节 and 立春.
 
 ## Architecture & Data Flow
 

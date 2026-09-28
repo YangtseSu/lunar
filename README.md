@@ -29,7 +29,7 @@ cargo build --release
 $ lunar date -d 2026-09-07
 公历: 2026年9月7日 星期一
 农历: 丙午年七月廿六
-干支: 丙午 丙申 甲申
+干支: 丙午 丁酉 甲申
 生肖: 马
 节气: 白露
 星座: 处女
@@ -180,16 +180,26 @@ $ lunar date -f '星座%Z，%Q' -d 2026-09-07
 | `%m` | 公历月 |
 | `%d` | 公历日 |
 | `%A` | 星期几单字 (一~日) |
-| `%G` | 农历年干支 (丙午) |
+| `%G` | 农历年干支, 春节换年 (丙午) |
 | `%M` | 农历月汉字 (正月 / 闰六月 / 腊月) |
 | `%N` | 农历日汉字 (初一) |
 | `%n` | 农历日数字 (23) |
-| `%H` | 干支月 (丙申) |
+| `%H` | 干支月, 节气当日换月 (丁酉) |
 | `%D` | 干支日 (辛巳) |
 | `%S` | 生肖 (马) |
 | `%Q` | 节气 (当日无则空) |
 | `%Z` | 星座 (处女) |
 | `%%` | 字面 `%` |
+
+
+`%G` and `%H` are the two bases the tool keeps apart on purpose. `%G` is the
+lunar year, which turns at 春节 — the same year the `农历:` line names, and the
+year `cal -L` titles its months with. `%H` is the 干支 month, which turns on the
+節氣 day, because that is the month pillar the 黄历's 宜 / 忌 tables are keyed
+on. The `干支:` profile line therefore prints the 立春 year (`%G` is *not* what
+it shows), so that its three pillars are one self-consistent chain; the two
+bases disagree between 春节 and 立春 and on each 節氣 day, which is why the
+`农历:` line and the `干支:` line can name different years on the same day.
 
 `%A` yields only the weekday character, so any prefix works: `星期%A` = 星期一,
 `周%A` = 周一, `礼拜%A` = 礼拜一. A backslash escapes the next character and
@@ -206,7 +216,7 @@ the same table.
 $ lunar date -a -d 2026-09-07
 公历: 2026年9月7日 星期一
 农历: 丙午年七月廿六
-干支: 丙午 丙申 甲申
+干支: 丙午 丁酉 甲申
 生肖: 马
 节气: 白露
 星座: 处女

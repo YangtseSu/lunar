@@ -5,7 +5,7 @@
 //! ```text
 //! 公历: 2026年9月7日 星期一
 //! 农历: 丙午年七月廿六
-//! 干支: 丙午 丙申 甲申
+//! 干支: 丙午 丁酉 甲申
 //! 生肖: 马
 //! 节气: 白露
 //! 星座: 处女
@@ -15,6 +15,11 @@
 //! `法定: 中秋节 放假` / `法定: 中秋节 调休上班` line appears only when the
 //! day is on the statutory calendar. The `星座` line is last and never absent:
 //! a constellation is a function of the civil month and day alone.
+//!
+//! The `农历` and `干支` lines carry two different year pillars on purpose:
+//! the lunar year turns at 春节, the 干支 chain turns at 立春, and the month
+//! pillar the `干支` line prints is the one the 黄历's 宜 / 忌 tables are
+//! keyed on. See `calendar::li_chun_year_gan_zhi`.
 //!
 //! `-a` / `--almanac` appends the 黄历 block for the day — 宜忌, 冲煞, 神煞,
 //! 星宿, 纳音, 方位 and 物候 — after the profile. It is refused with `-f`,
@@ -131,10 +136,15 @@ fn write_profile(solar: Solar, out: &mut String) {
         calendar::lunar_month_name(lunar.month()),
         calendar::lunar_day_name(lunar.day()),
     );
+    // The `干支` line is the 干支 chain, so all three of its pillars share
+    // one basis: the year turns at 立春 here, not at 春节, because the month
+    // pillar the line prints is the one the 黄历 keys 宜 / 忌 on and it
+    // counts from 立春. The `农历:` line above is the lunar year itself and
+    // keeps the 春节 basis.
     let _ = writeln!(
         out,
         "干支: {} {} {}",
-        calendar::year_gan_zhi(&lunar),
+        calendar::li_chun_year_gan_zhi(&lunar),
         calendar::month_gan_zhi(&lunar),
         calendar::day_gan_zhi(&lunar),
     );
