@@ -30,7 +30,12 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          # Per-job, not shared: a key two jobs write at once makes the second
+          # one fail to save — `Unable to reserve cache … another job may be
+          # creating this cache` — after uploading the whole archive. The two
+          # jobs build different things anyway (clippy and rustfmt artifacts
+          # against a plain debug build), so one entry cannot serve both.
+          key: ${{ runner.os }}-cargo-gates-${{ hashFiles('**/Cargo.lock') }}
 
       - name: Build
         run: cargo build --locked
@@ -66,7 +71,7 @@ jobs:
             ~/.cargo/registry
             ~/.cargo/git
             target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+          key: ${{ runner.os }}-cargo-samples-${{ hashFiles('**/Cargo.lock') }}
 
       # The expectations are `target/debug/lunar` output, so the debug binary
       # is what has to exist.
