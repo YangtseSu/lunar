@@ -386,6 +386,13 @@ in both READMEs' `console` blocks against the binary and exits non-zero on a
 single mismatched byte. It is stdlib Python 3 with no dependencies, and CI
 runs it as written rather than carrying a copy.
 
+`.github/dependabot.yml` checks the three direct dependencies daily and
+opens a pull request per bump — never a grouped batch, because a bump is a
+commit like any other and gets the gates run against it. Its
+`open-pull-requests-limit` is a large number on purpose: Dependabot reads
+`0` as *disable version updates*, so the one value that would look like
+"no limit" is the one that switches them off.
+
 ## Commit Discipline
 
 - **One plan, one commit.** A commit is one coherent working change — never two

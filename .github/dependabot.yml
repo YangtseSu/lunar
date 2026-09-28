@@ -1,0 +1,22 @@
+# Dependabot watches the three direct dependencies — `clap`, `lunar-rs` and
+# `tz-rs` — and the transitive set behind them, updating `Cargo.lock` daily.
+#
+# The pull-request limit is deliberately a large number rather than an absent
+# one. Dependabot's reference gives the two readings of a small value: setting
+# it to `0` *disables* version updates for the ecosystem, and "a large value can
+# be set to effectively remove the open pull request limit". So `0` is the one
+# number that means the opposite of what "no limit" sounds like; with three
+# dependencies 106 is not a budget, it is the absence of one. Security updates
+# are exempt from the limit regardless of its value.
+version: 2
+updates:
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 106
+    # A bump is a real change in this repository — one commit per change, with
+    # the gates run against it — so it gets its own pull request and its own
+    # review. Grouping would trade that away for a tidier inbox.
+    labels:
+      - "dependencies"

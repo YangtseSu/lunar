@@ -3451,3 +3451,39 @@ fn the_ci_workflow_covers_the_gates() {
         "a document still claims the repository has no CI"
     );
 }
+
+/// Dependabot's `open-pull-requests-limit` has one value that reads like
+/// "unlimited" and does the opposite: `0` *disables* version updates for the
+/// ecosystem. Nothing errors when that happens — the updates simply stop —
+/// so the limit is pinned here, along with the daily schedule it exists for.
+#[test]
+fn dependabot_checks_daily_without_a_real_limit() {
+    let config = include_str!("../.github/dependabot.yml");
+    assert!(
+        config.contains("package-ecosystem: \"cargo\""),
+        "dependabot does not watch the cargo manifest"
+    );
+    assert!(
+        config.contains("interval: \"daily\""),
+        "dependabot does not check daily"
+    );
+    assert!(
+        !config.contains("open-pull-requests-limit: 0"),
+        "open-pull-requests-limit: 0 disables version updates, it is not 'no limit'"
+    );
+    let limit = config
+        .lines()
+        .find_map(|line| line.trim().strip_prefix("open-pull-requests-limit:"))
+        .expect("dependabot sets open-pull-requests-limit")
+        .trim()
+        .parse::<u32>()
+        .expect("the limit is an integer");
+    assert!(
+        limit >= 100,
+        "the limit is {limit}, low enough to throttle a 3-dependency project"
+    );
+    assert!(
+        !config.contains("groups:"),
+        "a grouped batch merges several bumps into one untested commit"
+    );
+}
