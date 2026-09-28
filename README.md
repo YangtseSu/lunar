@@ -11,8 +11,8 @@ Unix tools they are named after, and one the tools have no counterpart for:
   solar terms, festivals and the statutory calendar (放假 / 调休), over civil
   months or, with `-L`, lunar months.
 - **`lunar bazi`** — 生辰八字: the four pillars of a birth moment, with 十神,
-  藏干, 纳音 and 地势. The only command that keeps a clock, because the 时柱
-  needs one.
+  藏干, 纳音, 地势, 五行, 旬空, 地支十神 and 命局. The only command that keeps
+  a clock, because the 时柱 needs one.
 
 Every calendar answer — the solar↔lunar conversion, the 24 solar terms, ganzhi,
 the festival tables, the 黄历 (宜忌 / 冲煞 / 神煞 / 星宿 / 纳音 / 方位) and the
@@ -383,9 +383,10 @@ A window that reaches past 1–9999 is reported, never clipped.
 
 ## `lunar bazi`
 
-生辰八字 — the four pillars of a birth moment, with 十神, 藏干, 纳音 and
-地势. It is the one command that keeps a clock, because one of the four pillars
-is the 时柱 and a chart without it is not a chart:
+生辰八字 — the four pillars of a birth moment, with 十神, 藏干, 纳音, 地势,
+五行, 旬空, 地支十神 and the 命局. It is the one command that keeps a clock,
+because one of the four pillars is the 时柱 and a chart without it is not a
+chart:
 
 ```console
 $ lunar bazi 1990-06-15T10:30
@@ -396,11 +397,23 @@ $ lunar bazi 1990-06-15T10:30
 藏干: 丁己 / 丁己 / 壬甲 / 丙庚戊
 纳音: 路旁土 / 杨柳木 / 钗钏金 / 长流水
 地势: 病 / 病 / 沐浴 / 死
+五行: 金火 / 水火 / 金水 / 水火
+旬空: 戌亥 / 申酉 / 寅卯 / 午未
+地支十神: 七杀偏印 / 七杀偏印 / 伤官正财 / 正官劫财正印
+命局: 胎元 癸酉(剑锋金) / 胎息 丙寅(炉中火) / 命宫 壬午(杨柳木) / 身宫 戊子(霹雳火)
 说明: 未给性别，无大运
 ```
 
-With no time of day there is no 时柱, and the tool says so rather than inventing
-one — a clock read off a date the user did not write would be a fabrication:
+五行 is the element of the 干 and the element of the 支, two characters per
+pillar — `庚` is 金 and `午` is 火, so the year pillar reads `金火`, which is
+not the 纳音's element (`路旁土` is 土). 地支十神 is one 十神 per 藏干 of the
+branch, so a cell is a phrase: `午` hides 丁 and 己, which against a 辛 day
+stem are 七杀 and 偏印.
+
+命局 is the four values a traditional chart sets beside the pillars rather
+than in them, each with its 纳音. Two of them are counted from the 時辰, so
+they need the same clock the 时柱 does and are the second thing a birth moment
+without one cannot answer:
 
 ```console
 $ lunar bazi 1990-06-15
@@ -412,8 +425,21 @@ $ lunar bazi 1990-06-15
 藏干: 丁己 / 丁己 / 壬甲
 纳音: 路旁土 / 杨柳木 / 钗钏金
 地势: 病 / 病 / 沐浴
+五行: 金火 / 水火 / 金水
+旬空: 戌亥 / 申酉 / 寅卯
+地支十神: 七杀偏印 / 七杀偏印 / 伤官正财
+命局: 胎元 癸酉(剑锋金) / 胎息 丙寅(炉中火)
+说明: 命宫 / 身宫需时柱
 说明: 未给性别，无大运
 ```
+
+胎元 and 胎息 need no 時辰 and stay; 命宫 and 身宫 are left out and said to
+be, rather than filled in from a noon the tool would have had to invent. Every
+row that belongs to a pillar is cut to three columns with the 时柱, so no row
+keeps a fourth cell the chart no longer has.
+
+The `说明` lines are the tool naming what the input could not answer: the
+时柱, then 命宫 / 身宫, then 大运. Each is reported rather than defaulted.
 
 The date is read by the same grammar `lunar date -d` uses, so every form is
 accepted here too — `1990-06-15 10:30`, `19900615T1030`, `1990/06/15 10:30` and
@@ -436,6 +462,10 @@ $ lunar bazi 2026-09-07T20:00
 藏干: 丁己 / 庚壬戊 / 庚壬戊 / 戊辛丁
 纳音: 天河水 / 山下火 / 泉中水 / 山头火
 地势: 死 / 绝 / 绝 / 养
+五行: 火火 / 火金 / 木金 / 木土
+旬空: 寅卯 / 辰巳 / 午未 / 申酉
+地支十神: 伤官正财 / 七杀偏印偏财 / 七杀偏印偏财 / 偏财正官伤官
+命局: 胎元 丁亥(屋上土) / 胎息 己巳(大林木) / 命宫 己亥(平地木) / 身宫 乙未(沙中金)
 说明: 未给性别，无大运
 ```
 
@@ -459,6 +489,10 @@ $ lunar bazi 1990-06-15T10:30 -g 男
 藏干: 丁己 / 丁己 / 壬甲 / 丙庚戊
 纳音: 路旁土 / 杨柳木 / 钗钏金 / 长流水
 地势: 病 / 病 / 沐浴 / 死
+五行: 金火 / 水火 / 金水 / 水火
+旬空: 戌亥 / 申酉 / 寅卯 / 午未
+地支十神: 七杀偏印 / 七杀偏印 / 伤官正财 / 正官劫财正印
+命局: 胎元 癸酉(剑锋金) / 胎息 丙寅(炉中火) / 命宫 壬午(杨柳木) / 身宫 戊子(霹雳火)
 起运: 1997年11月17日  (出生后 7年5月2天12小时)  顺行
 大运: 8-17 癸未 / 18-27 甲申 / 28-37 乙酉 / 38-47 丙戌 / 48-57 丁亥 / 58-67 戊子 / 68-77 己丑 / 78-87 庚寅 / 88-97 辛卯
 ```
@@ -474,6 +508,10 @@ $ lunar bazi 1990-06-15T10:30 -g 女
 藏干: 丁己 / 丁己 / 壬甲 / 丙庚戊
 纳音: 路旁土 / 杨柳木 / 钗钏金 / 长流水
 地势: 病 / 病 / 沐浴 / 死
+五行: 金火 / 水火 / 金水 / 水火
+旬空: 戌亥 / 申酉 / 寅卯 / 午未
+地支十神: 七杀偏印 / 七杀偏印 / 伤官正财 / 正官劫财正印
+命局: 胎元 癸酉(剑锋金) / 胎息 丙寅(炉中火) / 命宫 壬午(杨柳木) / 身宫 戊子(霹雳火)
 起运: 1993年7月4日  (出生后 3年0月18天16小时)  逆行
 大运: 4-13 辛巳 / 14-23 庚辰 / 24-33 己卯 / 34-43 戊寅 / 44-53 丁丑 / 54-63 丙子 / 64-73 乙亥 / 74-83 甲戌 / 84-93 癸酉
 ```

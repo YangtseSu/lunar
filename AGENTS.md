@@ -15,7 +15,7 @@ tools have no counterpart for:
   solar terms, festivals and the statutory calendar, over civil months or, with
   `-L`, lunar months;
 - **`lunar bazi`** — 生辰八字: the four pillars of a birth moment, with 十神,
-  藏干, 纳音 and 地势.
+  藏干, 纳音, 地势, 五行, 旬空, 地支十神 and 命局.
 
 **This repository never implements calendar arithmetic.** It parses arguments,
 shapes `lunar-rs` output and lays out grids. That is the whole job. When the
@@ -261,8 +261,12 @@ Invariants, in the order they are easiest to break:
   whole of 09-07 酉月. The two differ on each 節氣 day and agree on the rest;
   do not "fix" one to match the other. The 年柱 and 日柱 *are* shared with
   `date`, and must stay so.
-- **A birth moment with no clock has no 时柱.** `bazi` prints three pillars and
-  a `说明` line saying so; it never supplies a clock of its own. The trap is
+- **A birth moment with no clock has no 时柱, and no 命宫 or 身宫.** `bazi`
+  prints three pillars and a `说明` line saying so; it never supplies a clock
+  of its own. 命宫 and 身宫 are counted from the 時辰, so the no-clock chart
+  drops them from the `命局` row and says why — the engine *would* answer,
+  from a noon it was handed, and a noon is not the moment asked about. 胎元 and
+  胎息 need no 時辰 and stay. The trap is
   `split_zone` reading the `-` in `2025-01-29` as a zone sign and leaving
   `2025`, which the compact `hhmm` branch of `parse_clock` would then read as
   20:25 — so a bare clock must be required to carry a colon, exactly as
@@ -280,13 +284,23 @@ Invariants, in the order they are easiest to break:
   exits 0 — the same choice a missing time of day makes about the 时柱.
   `calendar::yun` takes `&EightChar`, not `&Lunar`, because `EightChar` borrows
   the `Lunar` it reads.
-- **`bazi`'s `write_chart` is a sequence of `writeln!` calls and has lost lines
-  twice.** Three rounds of change deleted a row each time, caught only because
-  the suite pins the whole chart byte-for-byte. It is split per plan 11 step 0
-  into pillar rows, 命局 and 大运; keep it that way. When editing it, the pinned
-  chart in `bazi_prints_four_pillars_only_with_a_time` is the contract — if the
-  output is meant to change, that test is what must be updated first, never
-  after the fact.
+- **`bazi`'s `write_chart` is a dispatcher, not a sequence of `writeln!`
+  calls, and that is load-bearing.** As one function it had lost a row twice in
+  three rounds of change, caught only because the suite pins the whole chart
+  byte-for-byte. It is split into `write_pillar_rows` / `write_ming_jun` /
+  `write_yun`, and the column count that trims a three-pillar chart to three
+  cells lives in exactly one place, `column_count`. Keep it that way. When
+  editing it, the pinned chart in
+  `bazi_prints_four_pillars_only_with_a_time` is the contract — if the output
+  is meant to change, that test is what must be updated first, never after the
+  fact.
+- **A 八字 row is about a pillar or it is about the chart; never both.** 七
+  rows carry four cells aligned to the four pillars (十神 / 藏干 / 纳音 / 地势 /
+  五行 / 旬空 / 地支十神) and are cut to three when there is no 时柱. The
+  `命局` row carries four single values that belong to no pillar and is not
+  aligned. 五行 is the 干's element then the 支's, not the 纳音's; 地支十神 is
+  one 十神 per 藏干, so a cell is a phrase. Both are the engine's per-character
+  answer, and this tool only lays them out.
 
 ## Testing & QA
 

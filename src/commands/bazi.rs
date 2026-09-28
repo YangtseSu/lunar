@@ -8,11 +8,16 @@
 //! $ lunar bazi 1990-06-15T10:30
 //! 公历: 1990年6月15日 10:30
 //! 农历: 庚午年五月廿三
-//! 八字: 庚午 壬午 辛亥 癸巳
-//! 十神: 劫财 伤官 日主 食神
+//! 八字: 庚午 / 壬午 / 辛亥 / 癸巳
+//! 十神: 劫财 / 伤官 / 日主 / 食神
 //! 藏干: 丁己 / 丁己 / 壬甲 / 丙庚戊
 //! 纳音: 路旁土 / 杨柳木 / 钗钏金 / 长流水
 //! 地势: 病 / 病 / 沐浴 / 死
+//! 五行: 金火 / 水火 / 金水 / 水火
+//! 旬空: 戌亥 / 申酉 / 寅卯 / 午未
+//! 地支十神: 七杀偏印 / 七杀偏印 / 伤官正财 / 正官劫财正印
+//! 命局: 胎元 癸酉(剑锋金) / 胎息 丙寅(炉中火) / 命宫 壬午(杨柳木) / 身宫 戊子(霹雳火)
+//! 说明: 未给性别，无大运
 //! ```
 //!
 //! With no time of day the 时柱 does not exist, and the tool prints three
@@ -22,13 +27,28 @@
 //! $ lunar bazi 1990-06-15
 //! 公历: 1990年6月15日
 //! 农历: 庚午年五月廿三
-//! 八字: 庚午 壬午 辛亥
+//! 八字: 庚午 / 壬午 / 辛亥
 //! 说明: 未给时刻，无时柱
-//! 十神: 劫财 伤官 日主
+//! 十神: 劫财 / 伤官 / 日主
 //! 藏干: 丁己 / 丁己 / 壬甲
 //! 纳音: 路旁土 / 杨柳木 / 钗钏金
 //! 地势: 病 / 病 / 沐浴
+//! 五行: 金火 / 水火 / 金水
+//! 旬空: 戌亥 / 申酉 / 寅卯
+//! 地支十神: 七杀偏印 / 七杀偏印 / 伤官正财
+//! 命局: 胎元 癸酉(剑锋金) / 胎息 丙寅(炉中火)
+//! 说明: 命宫 / 身宫需时柱
 //! ```
+//!
+//! 命宫 and 身宫 are the second thing a chart cannot answer without a clock,
+//! after the 时柱 itself: both are counted from the 時辰. The engine would
+//! still return a pair for a birth moment given no time — it is handed a noon
+//! to work from — but that is an answer about noon, and a chart that quietly
+//! assumed noon would put a 05:00 birth's 命宫 on someone else's 時辰.
+//!
+//! 五行 is the two characters the 干 and the 支 each carry (`庚` 金, `午` 火,
+//! so `金火`) and is not the 纳音's element, and 地支十神 is one 十神 per
+//! 藏干 of the branch — a phrase, not a word.
 //!
 //! The 月柱 turns at the 節氣 **instant**, where the `干支` line of
 //! `lunar date` turns at the 節氣 **day** — and both are right, because they
@@ -137,7 +157,13 @@ fn resolve(args: &BaziArgs, today: CivilDate) -> Result<Moment, CalError> {
     }
 }
 
-/// Writes the chart: the pillar rows, then 大运 when a gender was given.
+/// Writes the chart: the pillar rows, then 命局, then 大运 when a gender was
+/// given.
+///
+/// The three sections are separate functions because they answer three
+/// separate questions, and this function has lost a row twice while changing
+/// one of them; `bazi_prints_four_pillars_only_with_a_time` pins the whole
+/// chart, and it is the first thing to read when one goes missing.
 fn write_chart(solar: &Solar, has_time: bool, gender: Option<Gender>, out: &mut String) {
     let (hour, minute) = (solar.hour(), solar.minute());
     let lunar = solar.lunar();
@@ -161,54 +187,147 @@ fn write_chart(solar: &Solar, has_time: bool, gender: Option<Gender>, out: &mut 
     );
 
     let eight: EightChar = calendar::eight_char(&lunar);
-    let mut pillars = vec![eight.year(), eight.month(), eight.day(), eight.time()];
-    let mut shi_shen = vec![
-        eight.year_shi_shen_gan().to_string(),
-        eight.month_shi_shen_gan().to_string(),
-        // The day stem is the 日主, so it has no 十神 of its own to name.
-        "日主".to_string(),
-        eight.time_shi_shen_gan().to_string(),
-    ];
-    let mut hide = vec![
-        hide_gan(eight.year_hide_gan()),
-        hide_gan(eight.month_hide_gan()),
-        hide_gan(eight.day_hide_gan()),
-        hide_gan(eight.time_hide_gan()),
-    ];
-    let mut na_yin = vec![
-        eight.year_na_yin().to_string(),
-        eight.month_na_yin().to_string(),
-        eight.day_na_yin().to_string(),
-        eight.time_na_yin().to_string(),
-    ];
-    let mut terrain = vec![
-        eight.year_terrain().name().to_string(),
-        eight.month_terrain().name().to_string(),
-        eight.day_terrain().name().to_string(),
-        eight.time_terrain().name().to_string(),
-    ];
+    write_pillar_rows(&eight, has_time, out);
+    write_ming_jun(&eight, has_time, out);
+    write_yun(&eight, gender, out);
+}
 
-    if has_time {
-        let _ = writeln!(out, "八字: {}", pillars.join(" / "));
-    } else {
-        pillars.truncate(3);
-        shi_shen.truncate(3);
-        hide.truncate(3);
-        na_yin.truncate(3);
-        terrain.truncate(3);
-        let _ = writeln!(out, "八字: {}", pillars.join(" / "));
+/// How many columns a row about a pillar has: four with a 时柱, three without.
+///
+/// Every such row is cut here rather than row by row, so no row can keep a
+/// fourth cell after the 时柱 is gone.
+fn column_count(has_time: bool) -> usize {
+    match has_time {
+        true => 4,
+        false => 3,
+    }
+}
+
+/// Writes the rows that are about a pillar, one row per attribute, aligned to
+/// the pillars they describe.
+fn write_pillar_rows(eight: &EightChar, has_time: bool, out: &mut String) {
+    let columns = column_count(has_time);
+    let _ = writeln!(
+        out,
+        "八字: {}",
+        [eight.year(), eight.month(), eight.day(), eight.time()][..columns].join(" / ")
+    );
+    if !has_time {
         let _ = writeln!(out, "说明: 未给时刻，无时柱");
     }
-    let _ = writeln!(out, "十神: {}", shi_shen.join(" / "));
-    let _ = writeln!(out, "藏干: {}", hide.join(" / "));
-    let _ = writeln!(out, "纳音: {}", na_yin.join(" / "));
-    let _ = writeln!(out, "地势: {}", terrain.join(" / "));
+    for (label, cells) in [
+        (
+            "十神",
+            [
+                eight.year_shi_shen_gan().to_string(),
+                eight.month_shi_shen_gan().to_string(),
+                // The day stem is the 日主, so it has no 十神 of its own to name.
+                "日主".to_string(),
+                eight.time_shi_shen_gan().to_string(),
+            ],
+        ),
+        (
+            "藏干",
+            [
+                join_names(eight.year_hide_gan()),
+                join_names(eight.month_hide_gan()),
+                join_names(eight.day_hide_gan()),
+                join_names(eight.time_hide_gan()),
+            ],
+        ),
+        (
+            "纳音",
+            [
+                eight.year_na_yin().to_string(),
+                eight.month_na_yin().to_string(),
+                eight.day_na_yin().to_string(),
+                eight.time_na_yin().to_string(),
+            ],
+        ),
+        (
+            "地势",
+            [
+                eight.year_terrain().name().to_string(),
+                eight.month_terrain().name().to_string(),
+                eight.day_terrain().name().to_string(),
+                eight.time_terrain().name().to_string(),
+            ],
+        ),
+        (
+            "五行",
+            [
+                eight.year_wu_xing(),
+                eight.month_wu_xing(),
+                eight.day_wu_xing(),
+                eight.time_wu_xing(),
+            ],
+        ),
+        (
+            "旬空",
+            [
+                eight.year_xun_kong().to_string(),
+                eight.month_xun_kong().to_string(),
+                eight.day_xun_kong().to_string(),
+                eight.time_xun_kong().to_string(),
+            ],
+        ),
+        (
+            "地支十神",
+            [
+                join_names(&eight.year_shi_shen_zhi()),
+                join_names(&eight.month_shi_shen_zhi()),
+                join_names(&eight.day_shi_shen_zhi()),
+                join_names(&eight.time_shi_shen_zhi()),
+            ],
+        ),
+    ] {
+        let _ = writeln!(out, "{label}: {}", cells[..columns].join(" / "));
+    }
+}
+
+/// Writes the 命局 row: the four values a traditional chart sets beside the
+/// pillars, none of which belongs to one pillar.
+///
+/// 命宫 and 身宫 are counted from the 时柱, and a birth moment with no time of
+/// day has none. The engine would still answer — from a noon it was handed —
+/// and that noon is a value for noon, not an answer about the moment asked
+/// about, so those two are left out and said to be, the same choice a missing
+/// 时柱 makes about its own row.
+fn write_ming_jun(eight: &EightChar, has_time: bool, out: &mut String) {
+    let mut cells = vec![
+        format!("胎元 {}({})", eight.tai_yuan(), eight.tai_yuan_na_yin()),
+        format!("胎息 {}({})", eight.tai_xi(), eight.tai_xi_na_yin()),
+    ];
+    if has_time {
+        cells.push(format!(
+            "命宫 {}({})",
+            eight.ming_gong(),
+            eight.ming_gong_na_yin()
+        ));
+        cells.push(format!(
+            "身宫 {}({})",
+            eight.shen_gong(),
+            eight.shen_gong_na_yin()
+        ));
+    }
+    let _ = writeln!(out, "命局: {}", cells.join(" / "));
+    if !has_time {
+        let _ = writeln!(out, "说明: 命宫 / 身宫需时柱");
+    }
+}
+
+/// Writes 起运 and 大运, or the line saying why there are none.
+///
+/// 顺逆 runs on the year stem's parity and the gender, and there is no default
+/// to assume, so a chart without a gender prints the pillars and says what is
+/// missing. A gender changes these two rows and nothing above them.
+fn write_yun(eight: &EightChar, gender: Option<Gender>, out: &mut String) {
     match gender {
         None => {
             let _ = writeln!(out, "说明: 未给性别，无大运");
         }
         Some(gender) => {
-            let yun = calendar::yun(&eight, gender);
+            let yun = calendar::yun(eight, gender);
             let start = yun.start_solar();
             // Both remainders the engine hands back, in the one field: the
             // month count alone drops up to 29 days, and `start_hour` is
@@ -246,12 +365,10 @@ fn write_chart(solar: &Solar, has_time: bool, gender: Option<Gender>, out: &mut 
     }
 }
 
-/// The 藏干 of one pillar, as the engine lists them: 本气 first, then 中气
-/// and 余气, which is why a pillar's cell is two or three characters wide and
-/// the rows are separated by ` / ` rather than space-aligned.
-fn hide_gan(gan: &[&'static str]) -> String {
-    gan.iter()
-        .map(|g| g.to_string())
-        .collect::<Vec<String>>()
-        .join("")
+/// One pillar's cell, for an attribute the engine lists as several
+/// one-character names: the 藏干 of a branch (本气 first, then 中气 and 余气)
+/// and the 十神 those 藏干 form. A cell is therefore two or three characters
+/// wide, and the rows are separated by ` / ` rather than space-aligned.
+fn join_names(names: &[&'static str]) -> String {
+    names.iter().map(|name| name.to_string()).collect()
 }

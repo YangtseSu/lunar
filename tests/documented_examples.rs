@@ -2887,6 +2887,10 @@ fn bazi_prints_four_pillars_only_with_a_time() {
          藏干: 丁己 / 丁己 / 壬甲 / 丙庚戊\n\
          纳音: 路旁土 / 杨柳木 / 钗钏金 / 长流水\n\
          地势: 病 / 病 / 沐浴 / 死\n\
+         五行: 金火 / 水火 / 金水 / 水火\n\
+         旬空: 戌亥 / 申酉 / 寅卯 / 午未\n\
+         地支十神: 七杀偏印 / 七杀偏印 / 伤官正财 / 正官劫财正印\n\
+         命局: 胎元 癸酉(剑锋金) / 胎息 丙寅(炉中火) / 命宫 壬午(杨柳木) / 身宫 戊子(霹雳火)\n\
          说明: 未给性别，无大运"
     );
     // No time written: three pillars, and the tool says why.
@@ -2895,7 +2899,15 @@ fn bazi_prints_four_pillars_only_with_a_time() {
     assert!(three.contains("说明: 未给时刻，无时柱"), "{three}");
     assert!(!three.contains("癸巳"), "no 时柱 without a clock:\n{three}");
     // The rows that are about a pillar must not keep a fourth column.
-    for row in ["十神:", "藏干:", "纳音:", "地势:"] {
+    for row in [
+        "十神:",
+        "藏干:",
+        "纳音:",
+        "地势:",
+        "五行:",
+        "旬空:",
+        "地支十神:",
+    ] {
         let line = three
             .lines()
             .find_map(|l| l.strip_prefix(row))
@@ -2906,6 +2918,67 @@ fn bazi_prints_four_pillars_only_with_a_time() {
             "{row} has three columns without a 时柱, got {line:?}"
         );
     }
+}
+
+/// 命宫 and 身宫 are counted from the 时柱, so a birth moment without a time
+/// of day cannot answer them — and the tool says so rather than quoting the
+/// noon it substitutes internally, which is a value for noon and not an answer
+/// about the moment asked about. 胎元 and 胎息 do not need a 时柱, so they stay.
+#[test]
+fn the_ming_gong_needs_a_time_pillar() {
+    let noon = run(&["bazi", "1990-06-15"]);
+    let cells = row(&noon, "命局: ");
+    assert_eq!(
+        cells, "胎元 癸酉(剑锋金) / 胎息 丙寅(炉中火)",
+        "the two 命局 values that need no 时柱:\n{noon}"
+    );
+    assert!(noon.contains("说明: 命宫 / 身宫需时柱"), "{noon}");
+    // With a 时柱 both are named, and they are two different places: 身宫 is
+    // not the 命宫 of the same chart.
+    let timed = run(&["bazi", "1990-06-15T10:30"]);
+    assert!(
+        timed.contains(
+            "命局: 胎元 癸酉(剑锋金) / 胎息 丙寅(炉中火) / \
+             命宫 壬午(杨柳木) / 身宫 戊子(霹雳火)"
+        ),
+        "{timed}"
+    );
+    // A 23:00 birth is a 亥时 chart, and its 命宫 and 身宫 must move with it:
+    // one 時辰 cannot borrow another's answer.
+    let late = run(&["bazi", "1990-06-15T23:00"]);
+    assert!(
+        late.contains("命宫 丁亥(屋上土) / 身宫 癸未(杨柳木)"),
+        "命宫 / 身宫 follow the 時辰:\n{late}"
+    );
+}
+
+/// 五行 is the two characters the 干 and the 支 each carry — 庚 is 金 and 午
+/// is 火, so the year pillar reads `金火` — and it is not the 纳音's element
+/// (`路旁土` is 土). The row is the engine's per-character answer, pinned so a
+/// layout change cannot quietly start printing 纳音 instead.
+#[test]
+fn the_five_elements_open_with_the_stems_own_element() {
+    let chart = run(&["bazi", "1990-06-15T10:30"]);
+    assert_eq!(
+        row(&chart, "五行: "),
+        "金火 / 水火 / 金水 / 水火",
+        "{chart}"
+    );
+    // 辛亥: 辛 is 金, 亥 is 水. 癸巳: 癸 is 水, 巳 is 火.
+    assert!(chart.contains("八字: 庚午 / 壬午 / 辛亥 / 癸巳"), "{chart}");
+    assert!(
+        !chart.contains("五行: 金土"),
+        "路旁土 is the 纳音, not the 年柱's 五行:\n{chart}"
+    );
+}
+
+/// One pillar's row, as the chart draws it.
+fn row(chart: &str, label: &str) -> String {
+    chart
+        .lines()
+        .find_map(|line| line.strip_prefix(label))
+        .unwrap_or_else(|| panic!("{chart}: a {label} row"))
+        .to_string()
 }
 
 /// The year and day pillars are the same facts `lunar date` prints, on the
