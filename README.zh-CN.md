@@ -7,6 +7,7 @@
 [![CI](https://github.com/YangtseSu/lunar/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/YangtseSu/lunar/actions/workflows/ci.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
 [![Rust 2024](https://img.shields.io/badge/Rust-2024-2b866d?logo=rust)](https://www.rust-lang.org)
+[![AUR](https://img.shields.io/aur/version/lunar?label=AUR&logo=archlinux&logoColor=1793d1)](https://aur.archlinux.org/packages/lunar)
 
 [`lunar-rs`](https://crates.io/crates/lunar-rs)（纯 Rust 实现的寿星天文历引擎）的命令行
 包装器。它提供三个子命令——两个照着它们各自对标的 Unix 工具设计，另一个是那些工具没有
@@ -31,6 +32,12 @@ cargo build --release
 ```
 
 ## 安装
+
+Arch Linux 上可从 AUR 安装：
+
+```bash
+paru -S lunar
+```
 
 提供 Linux x86_64 与 aarch64 的二进制，在目标架构上用标准 glibc 工具链构建：
 
