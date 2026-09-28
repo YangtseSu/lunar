@@ -115,6 +115,9 @@ print("blocks:", len(blocks), "fails:", fails)
 | 08 | [干支月与宜忌用了不同月柱基准](plans/08-month-pillar-basis.md) ✅ | 自相矛盾 | **P1** |
 | 09 | [新增 `lunar bazi` 生辰八字](plans/09-bazi-chart.md) ✅ | 新增能力 | P2 |
 | 10 | [新增 `lunar bazi -g` 大运](plans/10-bazi-yun.md) ✅ | 新增能力 | P2 |
+| 11 | [八字补全：五行/旬空/胎元/命宫](plans/11-bazi-fill-in.md) | 新增能力 | P2 |
+| 12 | [流年 / 流月 / 小运](plans/12-bazi-liu-nian.md) | 新增能力 | P2 |
+| 13 | [真太阳时：只做方法论声明](plans/13-true-solar-time.md) | 文档声明 | P2 |
 
 ✅ = 已实施。
 
@@ -147,3 +150,7 @@ print("blocks:", len(blocks), "fails:", fails)
 
 **新增能力计划**额外要求：「现象」引用引擎实测值以证明能力齐备；「取舍」一节
 非空，且每条在 `docs/parity.md` 都有对应登记。
+
+计划队列现有三条（11 / 12 / 13），均为**新增能力或声明**，非缺陷：11 与 12 是
+`lunar-rs` 已实现、本仓库未暴露的排盘内容（计划 11 的引擎取值已在文件内实测
+核实），13 是方法论声明，不改一行代码。三者均已立案，按顺序执行。

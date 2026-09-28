@@ -459,7 +459,7 @@ $ lunar bazi 1990-06-15T10:30 -g 男
 藏干: 丁己 / 丁己 / 壬甲 / 丙庚戊
 纳音: 路旁土 / 杨柳木 / 钗钏金 / 长流水
 地势: 病 / 病 / 沐浴 / 死
-起运: 1997年11月17日  (出生后 7年5月)  顺行
+起运: 1997年11月17日  (出生后 7年5月2天12小时)  顺行
 大运: 8-17 癸未 / 18-27 甲申 / 28-37 乙酉 / 38-47 丙戌 / 48-57 丁亥 / 58-67 戊子 / 68-77 己丑 / 78-87 庚寅 / 88-97 辛卯
 ```
 
@@ -474,14 +474,15 @@ $ lunar bazi 1990-06-15T10:30 -g 女
 藏干: 丁己 / 丁己 / 壬甲 / 丙庚戊
 纳音: 路旁土 / 杨柳木 / 钗钏金 / 长流水
 地势: 病 / 病 / 沐浴 / 死
-起运: 1993年7月4日  (出生后 3年0月)  逆行
+起运: 1993年7月4日  (出生后 3年0月18天16小时)  逆行
 大运: 4-13 辛巳 / 14-23 庚辰 / 24-33 己卯 / 34-43 戊寅 / 44-53 丁丑 / 54-63 丙子 / 64-73 乙亥 / 74-83 甲戌 / 84-93 癸酉
 ```
 
-Ten steps, and the 起运 is printed as a date plus the months it took — never as
-a time of day, which the minute-count rule would render as an odd half-hour. A
-起运 shorter than a year is printed as it is (`出生后 0年1月`), not treated as
-an anomaly.
+Ten steps. The 起运 is printed as a date **and** the whole interval it took —
+`7年5月2天12小时`, not `7年5月` — because the month count alone drops up to
+29 days, and those two numbers then name the same moment instead of quietly
+differing. A 起运 shorter than a year is printed as it is, not treated as an
+anomaly, and a zero tail is left out rather than written `0天0小时`.
 
 流年 and 小运 are not here; they are a layer below the steps.
 

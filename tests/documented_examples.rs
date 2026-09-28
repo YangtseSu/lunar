@@ -3041,15 +3041,15 @@ fn bazi_without_a_gender_prints_the_pillars_and_says_why() {
         !chart.contains("起运:"),
         "no 起运 without a gender:\n{chart}"
     );
-    // The four pillars are the answer either way: a gender decides the 大运,
-    // never the chart.
+    // The pillars are the answer either way: a gender decides the 大运 rows
+    // and nothing above them, so every row before 起运 is identical.
     assert!(chart.contains("八字: 庚午 / 壬午 / 辛亥 / 癸巳"), "{chart}");
     assert_eq!(
+        chart.lines().take(7).collect::<Vec<_>>(),
         run(&["bazi", "1990-06-15T10:30", "-g", "男"])
             .lines()
             .take(7)
             .collect::<Vec<_>>(),
-        chart.lines().take(7).collect::<Vec<_>>(),
         "-g changes the 大运 rows and nothing above them"
     );
 }
@@ -3121,12 +3121,20 @@ fn the_luck_rows_sit_after_the_pillars() {
         .expect("a 大运 row");
     assert!(start < dayun, "起运 comes before the steps it explains");
     assert_eq!(dayun, lines.len() - 1, "大运 is the last row");
-    // The 起运 month count and the first step's age are the same fact read
-    // twice: 7年5月 after birth is age 8 in the first year of the 运.
+    // The 起运 line accounts for the whole interval: the month count alone
+    // drops up to 29 days, so the days and hours beside it are what make the
+    // printed count and the printed date the same fact. 7年5月 after a
+    // 1990-06-15 birth reaches 1997-11-17 by way of 2 days and 12 hours.
     assert!(
-        lines[start].contains("出生后 7年5月") && lines[dayun].starts_with("大运: 8-17 "),
+        lines[start].contains("出生后 7年5月2天12小时") && lines[dayun].starts_with("大运: 8-17 "),
         "{} / {}",
         lines[start],
         lines[dayun]
+    );
+    // A zero remainder is left out rather than printed as `0天0小时`.
+    assert!(
+        !lines[start].contains("0天0小时") && !lines[start].contains("天0小时"),
+        "no zero tail on the 起运 line: {}",
+        lines[start]
     );
 }

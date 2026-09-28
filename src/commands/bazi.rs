@@ -47,7 +47,7 @@
 //!
 //! ```text
 //! $ lunar bazi 1990-06-15T10:30 -g 男 | tail -2
-//! 起运: 1997年11月17日  (出生后 7年5月)  顺行
+//! 起运: 1997年11月17日  (出生后 7年5月2天12小时)  顺行
 //! 大运: 8-17 癸未 / 18-27 甲申 / 28-37 乙酉 / 38-47 丙戌 / 48-57 丁亥 / 58-67 戊子 / 68-77 己丑 / 78-87 庚寅 / 88-97 辛卯
 //! ```
 //!
@@ -210,14 +210,24 @@ fn write_chart(solar: &Solar, has_time: bool, gender: Option<Gender>, out: &mut 
         Some(gender) => {
             let yun = calendar::yun(&eight, gender);
             let start = yun.start_solar();
+            // Both remainders the engine hands back, in the one field: the
+            // month count alone drops up to 29 days, and `start_hour` is
+            // always an even hour (0–22) standing for the hours left inside
+            // the last day. Dropping either would print a number that quietly
+            // disagrees with the date beside it.
             let _ = writeln!(
                 out,
-                "起运: {}年{}月{}日  (出生后 {}年{}月)  {}",
+                "起运: {}年{}月{}日  (出生后 {}年{}月{}天{})  {}",
                 start.year(),
                 start.month(),
                 start.day(),
                 yun.start_year(),
                 yun.start_month(),
+                yun.start_day(),
+                match yun.start_hour() {
+                    0 => String::new(),
+                    hours => format!("{hours}小时"),
+                },
                 match yun.is_forward() {
                     true => "顺行",
                     false => "逆行",
