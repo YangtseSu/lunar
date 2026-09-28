@@ -8,7 +8,9 @@ use std::fmt;
 use std::sync::Arc;
 
 use lunar_rs::solar_util;
-use lunar_rs::{EightChar, Holiday, Lunar, LunarFestival, LunarMonth, LunarYear, Solar};
+use lunar_rs::{
+    EightChar, Gender, Holiday, Lunar, LunarFestival, LunarMonth, LunarYear, Solar, Yun,
+};
 
 use crate::civil::CivilDate;
 
@@ -84,6 +86,10 @@ pub enum CalError {
     /// Carries the two fields as written, so the message names the number
     /// the user typed rather than a normalized one.
     BadTimeOfDay { hour: i32, minute: i32 },
+    /// A `-g` value that is neither a man nor a woman, as `lunar bazi` reads.
+    ///
+    /// Carries the text as written, so the message can quote it back.
+    BadGender { value: String },
     /// A positional argument that is not a number, or one too many of them.
     /// Carries the offending text, empty when the count is what is wrong.
     BadArgument { detail: String },
@@ -135,6 +141,9 @@ impl CalError {
             }
             Self::BadTimeOfDay { hour, minute } => {
                 format!("时刻 {hour}:{minute:02} 非法 (应为 00:00–23:59)")
+            }
+            Self::BadGender { value } => {
+                format!("性别 {value} 无法识别 (应为 男/女，或 male/female)")
             }
             Self::UnparsableDate { input } => format!("无法解析的日期: {input}"),
             Self::BadTimeZone { source } => format!("无法读取时区: {source}"),
@@ -258,6 +267,30 @@ pub fn solar_at(
 pub fn eight_char(lunar: &Lunar) -> EightChar<'_> {
     lunar.eight_char()
 }
+
+/// 大运 and its 起运, for a chart whose gender the caller supplied.
+///
+/// The engine carries two 起运 algorithms behind the same `sect` parameter
+/// `eight_char` uses, and they are two rules rather than two precisions of
+/// one: `Yun::compute_start` counts **hours within 时辰** when `sect == 1`
+/// and **minutes** when `sect == 2`. The two disagree on the 起运 month by up
+/// to eight days, so the choice is a policy one and it is made here rather
+/// than at each call site.
+///
+/// sect 2 is the choice: it counts minutes, which is the finer rule. That it
+/// is also the value the chart defaults to is incidental — `eight_char` uses
+/// `sect` only for the day pillar, where the difference is the 23:00 子时 and
+/// nothing else.
+pub fn yun<'a>(eight: &'a EightChar<'a>, gender: Gender) -> Yun<'a> {
+    eight.yun_by_sect(gender, YUN_SECT)
+}
+
+/// The `sect` every 八字 and 大运 answer in this tool.
+///
+/// It fixes two separate choices the engine shares one parameter for: the
+/// day pillar does not move to the next day at 23:00, and 起运 is counted in
+/// minutes. Both are registered in `docs/parity.md`.
+const YUN_SECT: u8 = 2;
 
 /// Whether `month` is a lunar month number: `1..=12`, a negative number
 /// standing for the leap month of that ordinal.

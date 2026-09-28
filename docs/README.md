@@ -114,6 +114,7 @@ print("blocks:", len(blocks), "fails:", fails)
 | 07 | [过时文档注释清理](plans/07-doc-comment-rot.md) ✅ | 文档 | P2 |
 | 08 | [干支月与宜忌用了不同月柱基准](plans/08-month-pillar-basis.md) ✅ | 自相矛盾 | **P1** |
 | 09 | [新增 `lunar bazi` 生辰八字](plans/09-bazi-chart.md) ✅ | 新增能力 | P2 |
+| 10 | [新增 `lunar bazi -g` 大运](plans/10-bazi-yun.md) ✅ | 新增能力 | P2 |
 
 ✅ = 已实施。
 

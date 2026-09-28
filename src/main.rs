@@ -94,8 +94,12 @@ enum Command {
         positional: Vec<String>,
     },
 
-    /// 生辰八字（四柱十神），可带时刻
+    /// 生辰八字（四柱十神与大运），可带时刻
     Bazi {
+        /// 性别，决定大运顺行或逆行（缺省只印四柱）
+        #[arg(short = 'g', long = "gender", value_name = "性别")]
+        gender: Option<String>,
+
         /// 生辰，date 风格，可带时刻，如 '1990-06-15T10:30'（缺省为今天）
         #[arg(value_name = "生辰")]
         positional: Vec<String>,
@@ -213,8 +217,9 @@ fn main() -> ExitCode {
             today,
             &mut out,
         ),
-        Command::Bazi { positional } => bazi::run(
+        Command::Bazi { gender, positional } => bazi::run(
             &bazi::BaziArgs {
+                gender: gender.clone(),
                 positional: positional.clone(),
             },
             today,

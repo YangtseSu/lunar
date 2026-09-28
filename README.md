@@ -396,6 +396,7 @@ $ lunar bazi 1990-06-15T10:30
 藏干: 丁己 / 丁己 / 壬甲 / 丙庚戊
 纳音: 路旁土 / 杨柳木 / 钗钏金 / 长流水
 地势: 病 / 病 / 沐浴 / 死
+说明: 未给性别，无大运
 ```
 
 With no time of day there is no 时柱, and the tool says so rather than inventing
@@ -411,6 +412,7 @@ $ lunar bazi 1990-06-15
 藏干: 丁己 / 丁己 / 壬甲
 纳音: 路旁土 / 杨柳木 / 钗钏金
 地势: 病 / 病 / 沐浴
+说明: 未给性别，无大运
 ```
 
 The date is read by the same grammar `lunar date -d` uses, so every form is
@@ -434,15 +436,54 @@ $ lunar bazi 2026-09-07T20:00
 藏干: 丁己 / 庚壬戊 / 庚壬戊 / 戊辛丁
 纳音: 天河水 / 山下火 / 泉中水 / 山头火
 地势: 死 / 绝 / 绝 / 养
+说明: 未给性别，无大运
 ```
 
 The 年柱 and 日柱 are the same facts `lunar date` prints, on the same basis, so
 the two commands never disagree about them — including the 子时 that belongs to
 the day it began in rather than the day it ended.
 
-大运 is deliberately absent: it needs a gender, and its 起运 is a count of months
-whose rule differs between schools. That is a separate question from the chart
-itself.
+### 大运
+
+大运 needs a **gender**: it runs forward for a man born in a yang year and
+backward otherwise, and there is no default to assume. `-g` takes `男` / `女`
+(or `male` / `female`). Without it the four pillars still print and the chart
+says why the rest is missing:
+
+```console
+$ lunar bazi 1990-06-15T10:30 -g 男
+公历: 1990年6月15日 10:30
+农历: 庚午年五月廿三
+八字: 庚午 / 壬午 / 辛亥 / 癸巳
+十神: 劫财 / 伤官 / 日主 / 食神
+藏干: 丁己 / 丁己 / 壬甲 / 丙庚戊
+纳音: 路旁土 / 杨柳木 / 钗钏金 / 长流水
+地势: 病 / 病 / 沐浴 / 死
+起运: 1997年11月17日  (出生后 7年5月)  顺行
+大运: 8-17 癸未 / 18-27 甲申 / 28-37 乙酉 / 38-47 丙戌 / 48-57 丁亥 / 58-67 戊子 / 68-77 己丑 / 78-87 庚寅 / 88-97 辛卯
+```
+
+The same birth with 女 runs the other way, from a different 起运:
+
+```console
+$ lunar bazi 1990-06-15T10:30 -g 女
+公历: 1990年6月15日 10:30
+农历: 庚午年五月廿三
+八字: 庚午 / 壬午 / 辛亥 / 癸巳
+十神: 劫财 / 伤官 / 日主 / 食神
+藏干: 丁己 / 丁己 / 壬甲 / 丙庚戊
+纳音: 路旁土 / 杨柳木 / 钗钏金 / 长流水
+地势: 病 / 病 / 沐浴 / 死
+起运: 1993年7月4日  (出生后 3年0月)  逆行
+大运: 4-13 辛巳 / 14-23 庚辰 / 24-33 己卯 / 34-43 戊寅 / 44-53 丁丑 / 54-63 丙子 / 64-73 乙亥 / 74-83 甲戌 / 84-93 癸酉
+```
+
+Ten steps, and the 起运 is printed as a date plus the months it took — never as
+a time of day, which the minute-count rule would render as an odd half-hour. A
+起运 shorter than a year is printed as it is (`出生后 0年1月`), not treated as
+an anomaly.
+
+流年 and 小运 are not here; they are a layer below the steps.
 
 ## Supported range
 

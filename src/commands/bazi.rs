@@ -42,13 +42,22 @@
 //! to the day it began in — so those two pillars never disagree between the
 //! two commands.
 //!
-//! 大运 is not here. It needs a gender, and its 起运 is a count of months
-//! whose rule differs between schools; that is its own question, and this
-//! command answers the one it can answer without taking a side.
+//! 大运 comes with `-g`, because it runs forward or backward according to the
+//! year stem's parity and the gender, and there is no default to assume:
+//!
+//! ```text
+//! $ lunar bazi 1990-06-15T10:30 -g 男 | tail -2
+//! 起运: 1997年11月17日  (出生后 7年5月)  顺行
+//! 大运: 8-17 癸未 / 18-27 甲申 / 28-37 乙酉 / 38-47 丙戌 / 48-57 丁亥 / 58-67 戊子 / 68-77 己丑 / 78-87 庚寅 / 88-97 辛卯
+//! ```
+//!
+//! Without `-g` the four pillars still print, and a `说明` line says what is
+//! missing — the same answer a birth moment with no clock gets, three pillars
+//! instead of four. 流年 and 小运 are a layer below the steps and are not here.
 
 use std::fmt::Write as _;
 
-use lunar_rs::{EightChar, Solar};
+use lunar_rs::{EightChar, Gender, Solar};
 
 use crate::calendar::{self, CalError};
 use crate::civil::CivilDate;
@@ -57,6 +66,8 @@ use crate::datestr::{self, Moment};
 /// Everything `lunar bazi` was asked to do.
 #[derive(Debug, Clone)]
 pub struct BaziArgs {
+    /// `-g`: the gender that decides whether 大运 runs forward or back.
+    pub gender: Option<String>,
     /// Positional: one `date(1)` style string, optionally with a time of day.
     pub positional: Vec<String>,
 }
@@ -64,6 +75,10 @@ pub struct BaziArgs {
 /// Runs `lunar bazi`, writing to `out`.
 pub fn run(args: &BaziArgs, today: CivilDate, out: &mut String) -> Result<(), CalError> {
     let moment = resolve(args, today)?;
+    let gender = match &args.gender {
+        Some(text) => Some(gender(text)?),
+        None => None,
+    };
     let (hour, minute) = match moment.seconds_of_day {
         Some(seconds) => (seconds / 3600, (seconds % 3600) / 60),
         // No clock was written. Noon resolves the same three pillars the day
@@ -79,8 +94,24 @@ pub fn run(args: &BaziArgs, today: CivilDate, out: &mut String) -> Result<(), Ca
         hour,
         minute,
     )?;
-    write_chart(&solar, moment.seconds_of_day.is_some(), out);
+    write_chart(&solar, moment.seconds_of_day.is_some(), gender, out);
     Ok(())
+}
+
+/// The gender names `-g` accepts, in the forms a user is likely to reach for.
+///
+/// 大运 runs forward for a yang year and a man and backward otherwise, so
+/// there is no default to assume: a chart without it prints the four pillars
+/// and says the 大运 are missing, which is the same choice a birth moment
+/// with no time of day makes about its 时柱.
+fn gender(text: &str) -> Result<Gender, CalError> {
+    match text.trim() {
+        "男" | "male" | "m" | "M" => Ok(Gender::Man),
+        "女" | "female" | "f" | "F" => Ok(Gender::Woman),
+        other => Err(CalError::BadGender {
+            value: other.to_string(),
+        }),
+    }
 }
 
 /// Resolves the birth moment from the single positional argument.
@@ -106,8 +137,8 @@ fn resolve(args: &BaziArgs, today: CivilDate) -> Result<Moment, CalError> {
     }
 }
 
-/// Writes the chart: one row per facet, four columns or three.
-fn write_chart(solar: &Solar, has_time: bool, out: &mut String) {
+/// Writes the chart: the pillar rows, then 大运 when a gender was given.
+fn write_chart(solar: &Solar, has_time: bool, gender: Option<Gender>, out: &mut String) {
     let (hour, minute) = (solar.hour(), solar.minute());
     let lunar = solar.lunar();
     let _ = writeln!(
@@ -172,6 +203,37 @@ fn write_chart(solar: &Solar, has_time: bool, out: &mut String) {
     let _ = writeln!(out, "藏干: {}", hide.join(" / "));
     let _ = writeln!(out, "纳音: {}", na_yin.join(" / "));
     let _ = writeln!(out, "地势: {}", terrain.join(" / "));
+    match gender {
+        None => {
+            let _ = writeln!(out, "说明: 未给性别，无大运");
+        }
+        Some(gender) => {
+            let yun = calendar::yun(&eight, gender);
+            let start = yun.start_solar();
+            let _ = writeln!(
+                out,
+                "起运: {}年{}月{}日  (出生后 {}年{}月)  {}",
+                start.year(),
+                start.month(),
+                start.day(),
+                yun.start_year(),
+                yun.start_month(),
+                match yun.is_forward() {
+                    true => "顺行",
+                    false => "逆行",
+                }
+            );
+            // Ten steps, the engine's own span. No `-n`: how many steps to
+            // show is a reading choice, not a different answer.
+            let steps: Vec<String> = yun
+                .da_yun()
+                .iter()
+                .filter(|d| d.index() >= 1)
+                .map(|d| format!("{}-{} {}", d.start_age(), d.end_age(), d.gan_zhi()))
+                .collect();
+            let _ = writeln!(out, "大运: {}", steps.join(" / "));
+        }
+    }
 }
 
 /// The 藏干 of one pillar, as the engine lists them: 本气 first, then 中气

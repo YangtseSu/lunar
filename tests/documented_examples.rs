@@ -2886,7 +2886,8 @@ fn bazi_prints_four_pillars_only_with_a_time() {
          十神: 劫财 / 伤官 / 日主 / 食神\n\
          藏干: 丁己 / 丁己 / 壬甲 / 丙庚戊\n\
          纳音: 路旁土 / 杨柳木 / 钗钏金 / 长流水\n\
-         地势: 病 / 病 / 沐浴 / 死"
+         地势: 病 / 病 / 沐浴 / 死\n\
+         说明: 未给性别，无大运"
     );
     // No time written: three pillars, and the tool says why.
     let three = run(&["bazi", "1990-06-15"]);
@@ -3023,4 +3024,109 @@ fn bazi_refuses_what_date_refuses() {
         );
     }
     assert!(run_failing(&["bazi", "1990", "6", "15", "10"]).contains("位置参数过多"));
+}
+
+/// 大运 needs a gender to know which way it runs, and there is no default to
+/// assume — so its absence is reported, not guessed at, exactly as a missing
+/// time of day costs the 时柱.
+#[test]
+fn bazi_without_a_gender_prints_the_pillars_and_says_why() {
+    let chart = run(&["bazi", "1990-06-15T10:30"]);
+    assert!(chart.contains("说明: 未给性别，无大运"), "{chart}");
+    assert!(
+        !chart.contains("大运:"),
+        "no 大运 without a gender:\n{chart}"
+    );
+    assert!(
+        !chart.contains("起运:"),
+        "no 起运 without a gender:\n{chart}"
+    );
+    // The four pillars are the answer either way: a gender decides the 大运,
+    // never the chart.
+    assert!(chart.contains("八字: 庚午 / 壬午 / 辛亥 / 癸巳"), "{chart}");
+    assert_eq!(
+        run(&["bazi", "1990-06-15T10:30", "-g", "男"])
+            .lines()
+            .take(7)
+            .collect::<Vec<_>>(),
+        chart.lines().take(7).collect::<Vec<_>>(),
+        "-g changes the 大运 rows and nothing above them"
+    );
+}
+
+/// A yang year runs forward for a man and backward for a woman, so the two
+/// genders must not be able to print the same 大运.
+#[test]
+fn the_gender_decides_which_way_the_luck_runs() {
+    let man = run(&["bazi", "1990-06-15T10:30", "-g", "男"]);
+    let woman = run(&["bazi", "1990-06-15T10:30", "-g", "女"]);
+    assert!(
+        man.contains("顺行") && woman.contains("逆行"),
+        "庚午 is a yang year: the man runs forward, the woman back\n{man}\n{woman}"
+    );
+    assert_ne!(
+        man.lines().find(|l| l.starts_with("大运: ")),
+        woman.lines().find(|l| l.starts_with("大运: ")),
+        "the two genders run opposite ways from the same month pillar"
+    );
+    // Both spellings of each gender reach the same answer.
+    assert_eq!(run(&["bazi", "1990-06-15T10:30", "-g", "male"]), man);
+    assert_eq!(run(&["bazi", "1990-06-15T10:30", "-g", "F"]), woman);
+    assert!(run_failing(&["bazi", "1990-06-15T10:30", "-g", "x"]).contains("性别 x 无法识别"));
+}
+
+/// A birth months after a 節气 reaches it almost at once, and 起运 is then
+/// smaller than a year. That is the answer, not an anomaly to be filtered.
+#[test]
+fn a_short_time_to_the_term_still_gives_a_start() {
+    // 2026-02-04 is 立春; a girl born that day is one month from the next
+    // term going backward, which is the engine's own `0年1月`.
+    let chart = run(&["bazi", "2026-02-04T12:00", "-g", "女"]);
+    assert!(
+        chart.contains("出生后 0年1月"),
+        "a 起运 under a year is printed as it is:\n{chart}"
+    );
+    assert!(chart.contains("逆行"), "{chart}");
+    // The step ages still start at 1 and run ten years each.
+    let steps: Vec<&str> = chart
+        .lines()
+        .find_map(|l| l.strip_prefix("大运: "))
+        .expect("a 大运 row")
+        .split(" / ")
+        .collect();
+    assert_eq!(
+        steps.len(),
+        9,
+        "the engine's ten steps less the pre-luck one"
+    );
+    assert!(
+        steps[0].starts_with("1-10 "),
+        "the first step is 1-10: {steps:?}"
+    );
+}
+
+/// The 大运 rows follow the pillars, and the 起运 line names the day the
+/// engine computed rather than a day this tool worked out.
+#[test]
+fn the_luck_rows_sit_after_the_pillars() {
+    let chart = run(&["bazi", "1990-06-15T10:30", "-g", "男"]);
+    let lines: Vec<&str> = chart.lines().collect();
+    let start = lines
+        .iter()
+        .position(|l| l.starts_with("起运: "))
+        .expect("a 起运 row");
+    let dayun = lines
+        .iter()
+        .position(|l| l.starts_with("大运: "))
+        .expect("a 大运 row");
+    assert!(start < dayun, "起运 comes before the steps it explains");
+    assert_eq!(dayun, lines.len() - 1, "大运 is the last row");
+    // The 起运 month count and the first step's age are the same fact read
+    // twice: 7年5月 after birth is age 8 in the first year of the 运.
+    assert!(
+        lines[start].contains("出生后 7年5月") && lines[dayun].starts_with("大运: 8-17 "),
+        "{} / {}",
+        lines[start],
+        lines[dayun]
+    );
 }

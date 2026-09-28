@@ -267,6 +267,19 @@ Invariants, in the order they are easiest to break:
   `2025`, which the compact `hhmm` branch of `parse_clock` would then read as
   20:25 — so a bare clock must be required to carry a colon, exactly as
   `parse_absolute` already does. A 子时 belongs to the day it began in.
+- **`sect` is one engine parameter with two meanings, and this tool pins it to
+  2 in both.** In `EightChar` it reaches the **day pillar only** (sect 1 moves a
+  23:00 子时 to the next day, sect 2 does not); in `Yun` it selects one of **two
+  起运 algorithms** (sect 1 counts 时辰, sect 2 counts minutes, differing by up
+  to eight days). The engine's own defaults disagree — `eight_char()` is 2,
+  `yun()` is 1 — so `calendar::yun` must pass the value explicitly. Neither is
+  exposed as a flag: both are professional choices, and `date` and `bazi` have
+  to agree about the day pillar.
+- **A missing `-g` costs the 大运, not the chart.** 顺逆 needs a gender and there
+  is none to assume, so `bazi` prints the four pillars and a `说明` line and
+  exits 0 — the same choice a missing time of day makes about the 时柱.
+  `calendar::yun` takes `&EightChar`, not `&Lunar`, because `EightChar` borrows
+  the `Lunar` it reads.
 
 ## Testing & QA
 
