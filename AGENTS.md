@@ -319,6 +319,18 @@ Invariants, in the order they are easiest to break:
   aligned. 五行 is the 干's element then the 支's, not the 纳音's; 地支十神 is
   one 十神 per 藏干, so a cell is a phrase. Both are the engine's per-character
   answer, and this tool only lays them out.
+- **The 时柱 is counted from the clock, and this tool never says otherwise.**
+  `bazi` charts the instant it is handed; the 时柱 is 钟表时, uncorrected for
+  longitude, daylight saving or the equation of time. Do not describe, imply
+  or let a flag suggest a 真太阳时 chart — there is no such thing here, and a
+  reader who assumes one is reading a different 时柱, a different 日柱 and a
+  different 起运. Correcting needs the birthplace longitude, an input this
+  tool has no concept of, and the schools disagree about which definition to
+  apply. Were it ever added, the 均时差 has to come from the engine: `sa_lon_t`
+  / `gxc_sun_lon` / `nutation_lon2` are private and `mod shou_xing` re-exports
+  four items, so the upstream change is a new public surface, not a helper. A
+  correction also moves the 日柱 and the 年柱 when it crosses midnight or a
+  节氣 instant, so it is never a 时柱-only switch.
 
 ## Testing & QA
 

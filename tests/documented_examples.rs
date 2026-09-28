@@ -3335,3 +3335,23 @@ fn a_luck_year_outside_the_range_is_reported() {
         );
     }
 }
+
+/// The 时柱 is counted from the clock, and a reader who assumes a 真太阳时
+/// chart is reading a different 时柱, a different 日柱 and a different 起运.
+/// The statement is what the tool has instead of a correction, so all three
+/// documents have to carry it — and the README has to name the clock, not
+/// only the absence of a correction.
+#[test]
+fn the_true_solar_time_caveat_is_documented() {
+    let readme = include_str!("../README.md");
+    let agents = include_str!("../AGENTS.md");
+    let parity = include_str!("../docs/parity.md");
+    for (name, doc) in [
+        ("README.md", readme),
+        ("AGENTS.md", agents),
+        ("docs/parity.md", parity),
+    ] {
+        assert!(doc.contains("真太阳时"), "{name} does not say 真太阳时");
+    }
+    assert!(readme.contains("钟表时"), "the README must name the clock");
+}

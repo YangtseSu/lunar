@@ -473,6 +473,33 @@ The 年柱 and 日柱 are the same facts `lunar date` prints, on the same basis,
 the two commands never disagree about them — including the 子时 that belongs to
 the day it began in rather than the day it ended.
 
+### The 时柱, and 真太阳时
+
+The 时柱 is counted from the **clock time** you typed, and this tool does not
+correct it to 真太阳时 — the local time at which the sun is actually on the
+meridian. Traditional 八字 practice uses the latter, so a chart here is a
+钟表时 chart and should be read as one.
+
+The difference is four minutes per degree of longitude from the standard
+meridian, plus a daylight-saving hour where one was in force, plus the
+equation of time (−14 to +16 minutes, never enough on its own). For Beijing
+(东经 116.4°) that is about 14 minutes — usually not enough to move a pillar.
+For 乌鲁木齐 (东经 87.6°) it is about 128 minutes, which **is** enough to move
+the 时柱 by one 时辰, and it moves 起运 with it. China runs one zone on 东经
+120° for the whole country, so the further west the birth, the wider the gap.
+
+Daylight saving is the other half: China observed it from 1986 to 1991, and
+between 1986-05-04 and 1986-09-14 a clock was an hour fast, which moves any
+birth just before 23:00 into the next day.
+
+None of this is corrected, and none of it is a bug in the engine — it charts
+the instant it is handed. Correcting would need the birthplace longitude,
+which is an input this tool has never taken, and the schools disagree about
+whether to correct at all and which of the three definitions to use. The
+engine carries no true-solar-time implementation, so the correction would have
+to be built there first. Until it is, this paragraph is the whole truth about
+the 时柱.
+
 ### 大运
 
 大运 needs a **gender**: it runs forward for a man born in a yang year and

@@ -117,7 +117,7 @@ print("blocks:", len(blocks), "fails:", fails)
 | 10 | [新增 `lunar bazi -g` 大运](plans/10-bazi-yun.md) ✅ | 新增能力 | P2 |
 | 11 | [八字补全：五行/旬空/胎元/命宫](plans/11-bazi-fill-in.md) ✅ | 新增能力 | P2 |
 | 12 | [流年 / 流月 / 小运](plans/12-bazi-liu-nian.md) ✅ | 新增能力 | P2 |
-| 13 | [真太阳时：只做方法论声明](plans/13-true-solar-time.md) | 文档声明 | P2 |
+| 13 | [真太阳时：只做方法论声明](plans/13-true-solar-time.md) ✅ | 文档声明 | P2 |
 
 ✅ = 已实施。
 
@@ -169,7 +169,8 @@ print("blocks:", len(blocks), "fails:", fails)
 取舍已从「待实施」转正登记到 `docs/parity.md`。实施后复验：套件由 89 增至 94
 （新增 5 个测试），README console 校验 22 块 `fails: 0`。
 
-计划队列现有一条（13），是**方法论声明**，不改一行代码。
+计划队列已空。计划 13 交付 README 的「The 时柱, and 真太阳时」小节与一条契约，
+不改一行代码；其取舍已转正登记到 `docs/parity.md`。
 
 计划 11 交付五行 / 旬空 / 地支十神三行与 `命局` 行。它带来的取舍——命宫 /
 身宫依赖时柱故无时刻时省略、只用引擎的「旬空」名不印别名、命局不按柱对齐——

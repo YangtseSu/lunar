@@ -1,6 +1,6 @@
 # 计划 13 — 真太阳时：只做方法论声明，不实现
 
-Status: 待实施 · Priority: P2 · Depends: 09
+Status: 已实施（2026-09-28） · Priority: P2 · Depends: 09
 
 ## 现象
 
