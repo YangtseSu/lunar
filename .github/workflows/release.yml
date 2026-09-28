@@ -30,10 +30,10 @@ jobs:
         include:
           - os: ubuntu-26.04
             arch: x86_64
-            target: x86_64-unknown-linux-musl
+            target: x86_64-unknown-linux-gnu
           - os: ubuntu-26.04-arm
             arch: aarch64
-            target: aarch64-unknown-linux-musl
+            target: aarch64-unknown-linux-gnu
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -52,22 +52,24 @@ jobs:
             target
           key: ${{ runner.os }}-release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
 
-      # musl, not the distro's glibc: a statically linked binary runs on any
-      # Linux regardless of how old its glibc is, which is the whole point of
-      # handing someone a file instead of a build.
+      # The host target: the release is what a user installs on the distribution
+      # they already run, so it is built by the toolchain's default linux
+      # target for that architecture rather than a statically linked variant
+      # that trades their allocator for portability to older systems.
       - name: Build
         run: cargo build --release --locked --target ${{ matrix.target }}
 
       - name: Smoke test the binary
         run: |
+          set -euo pipefail
           BIN="target/${{ matrix.target }}/release/lunar"
           file "$BIN"
-          # No dynamic section, or the static build did not take.
-          ! ldd "$BIN" 2>&1 | grep -qv "not a dynamic executable\|statically linked"
-          # `date` with no arguments reads the reference day, which resolves the
-          # system time zone: that is where `TimeZone::local()` reads tzdb
-          # from, and it is the one runtime input a static binary cannot
-          # carry with it.
+          # `date` with no arguments resolves the reference day, which reads
+          # the system tzdb — `TimeZone::local()` in tz-rs has no bundled
+          # copy. So the smoke test runs on the target's own zone, not on a
+          # hardcoded one, and a second zone to prove the lookup really is
+          # the system's.
+          "$BIN" date | head -2
           TZ=Asia/Shanghai "$BIN" date | head -2
           TZ=UTC "$BIN" date -d 2026-09-07 | head -2
 

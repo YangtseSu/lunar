@@ -30,7 +30,7 @@ cargo build --release
 
 ## 安装
 
-提供 Linux x86_64 与 aarch64 的静态二进制，用 musl 构建，不依赖发行版的 glibc 版本：
+提供 Linux x86_64 与 aarch64 的二进制，在目标架构上用标准 glibc 工具链构建：
 
 ```bash
 # x86_64

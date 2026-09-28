@@ -3500,8 +3500,8 @@ fn the_release_workflow_covers_both_architectures() {
         "x86_64",
         "aarch64",
         "ubuntu-26.04-arm",
-        "x86_64-unknown-linux-musl",
-        "aarch64-unknown-linux-musl",
+        "x86_64-unknown-linux-gnu",
+        "aarch64-unknown-linux-gnu",
         "tags: [\"v*\"]",
     ] {
         assert!(
@@ -3509,6 +3509,14 @@ fn the_release_workflow_covers_both_architectures() {
             "release.yml does not mention {want}"
         );
     }
+    // The release ships what the host toolchain produces, on the user's own
+    // glibc. musl would be a different binary with a different allocator, and
+    // it is a distribution decision this repository has no reason to make on
+    // the user's behalf.
+    assert!(
+        !workflow.contains("musl"),
+        "release.yml builds musl targets, which was not the ask"
+    );
     // The tag and the manifest have to agree, or the archive is named after one
     // version and the release page after another.
     let manifest = include_str!("../Cargo.toml");

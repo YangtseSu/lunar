@@ -34,8 +34,8 @@ cargo build --release
 
 ## Install
 
-Static binaries for Linux x86_64 and aarch64, built with musl so they run on
-any distribution regardless of its glibc version:
+Binaries for Linux x86_64 and aarch64, built with the standard glibc
+toolchain on the target architecture:
 
 ```bash
 # x86_64
