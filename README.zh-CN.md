@@ -2,6 +2,9 @@
 
 [English](README.md) | 简体中文
 
+[![Vibe Coded](https://img.shields.io/badge/vibe--coded-%F0%9F%A4%96-8A2BE2)](#开发方式)
+[![Release](https://img.shields.io/github/v/release/YangtseSu/lunar?sort=semver&label=%E6%9C%80%E6%96%B0%E7%89%88)](https://github.com/YangtseSu/lunar/releases/latest)
+
 [![CI](https://github.com/YangtseSu/lunar/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/YangtseSu/lunar/actions/workflows/ci.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
 [![Rust 2024](https://img.shields.io/badge/Rust-2024-2b866d?logo=rust)](https://www.rust-lang.org)
@@ -673,6 +676,16 @@ cargo clippy --all-targets
 
 `tests/documented_examples.rs` 启动真实二进制，钉住文档里的排版、令牌表、跨度与叠加
 开关，以及错误消息，另按日期钉住历法值。已公布的样例与天文引擎冲突时，以引擎为准。
+
+## 开发方式
+
+本项目在 AI 编码智能体辅助下开发：由人提出需求、审阅每一处改动，并把每条结论都拿到
+工具的真实运行上核对；代码主要由 AI 生成。本仓库不含任何自行实现的历法运算——那属于
+`lunar-rs`，两者的分工写在 `AGENTS.md` 里。
+
+两件事让这件事站得住：README 里的每条样例都从真实运行抄来，并在每次 push 时逐字节校验；
+而 `AGENTS.md` 整个是一组契约——干支基准、闰月的负号、`干支` 行用立春年——写在明处，
+后来的改动要推翻它们就必须先说明理由，而不是悄悄地破坏。
 
 ## 许可证
 

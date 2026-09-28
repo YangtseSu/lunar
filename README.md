@@ -2,6 +2,8 @@
 
 English | [简体中文](README.zh-CN.md)
 
+[![Vibe Coded](https://img.shields.io/badge/vibe--coded-%F0%9F%A4%96-8A2BE2)](#how-this-was-built)
+[![Release](https://img.shields.io/github/v/release/YangtseSu/lunar?sort=semver&label=release)](https://github.com/YangtseSu/lunar/releases/latest)
 [![CI](https://github.com/YangtseSu/lunar/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/YangtseSu/lunar/actions/workflows/ci.yml)
 [![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
 [![Rust 2024](https://img.shields.io/badge/Rust-2024-2b866d?logo=rust)](https://www.rust-lang.org)
@@ -740,6 +742,20 @@ cargo clippy --all-targets
 layout, the token table, the span and overlay switches, and the error messages,
 plus calendar values by date. Where a published sample disagrees with the
 astronomical engine, the engine wins.
+
+## How this was built
+
+This repository was developed with an AI coding agent. A human set the
+requirements, reviewed each change, and verified every claim against a real
+run of the tool; the code was written largely by the agent. Nothing in the
+calendar arithmetic is hand-rolled here — that is `lunar-rs`, and the
+division of labour is described in `AGENTS.md`.
+
+Two things keep that honest. Every documented sample in the READMEs is
+copied from a run of the binary and checked byte-for-byte on every push, and
+the whole of `AGENTS.md` is a set of contracts — the 干支 basis, the leap
+month sign, the year pillar of the 干支 line — written down so a later change
+has to argue with them rather than quietly break them.
 
 ## License
 
