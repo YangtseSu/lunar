@@ -404,7 +404,11 @@ commit like any other and gets the gates run against it. Its
   list describes the tree, not its history.
 - **Message.** One imperative subject under 72 characters, naming the behaviour;
   the body explains what was wrong and what changed. Prose subjects, not
-  conventional-commit prefixes.
+  conventional-commit prefixes. The subject ends with 🤖 — a space, then the
+  emoji — because the code is agent-written, and a reader scanning `git log`
+  should be able to see that without reading the diff. It counts toward the 72
+  characters, so an imperative subject gets the room it needs; the emoji is
+  the last thing in the line, never followed by a period.
 - **Never `git push`** without an explicit instruction. Committing locally is the
   end of the job.
 
