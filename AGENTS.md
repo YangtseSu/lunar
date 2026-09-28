@@ -23,7 +23,7 @@ engine and this tool disagree, the engine is right; when the engine lacks
 something, fix it upstream, not here.
 
 Non-goals: a library crate, a clock in `date` or `cal`, a language layer, async,
-weekday-derived holiday guesses, 大运. Do not add one without being asked.
+weekday-derived holiday guesses. Do not add one without being asked.
 
 `lunar bazi` is the single exception to the no-clock rule, and it exists
 because a 时柱 cannot exist without one: it reads a time of day, keeps it, and
