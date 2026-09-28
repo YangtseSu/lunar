@@ -53,40 +53,45 @@ AI 读完该文件即可开工，不需要本目录之外的上下文。
 
 ### README 样例校验脚本
 
-README 中每个 console 代码块里的 `$ lunar …` 行都必须与真实输出逐字节一致。
-在仓库根目录用以下脚本校验（实现者可按需另存为本地脚本，不必提交）：
+`README.md` 与 `README.zh-CN.md` 中每个 console 代码块里的 `$ lunar …` 行都必须与真实
+输出逐字节一致——译文与原文的输出是同一份，抄错一处就是错。在仓库根目录用以下脚本
+校验（实现者可按需另存为本地脚本，不必提交）：
 
 ```python
 import re, subprocess, shlex
 B = "./target/debug/lunar"
 FENCE = "`" * 3
-blocks = re.findall(f"{FENCE}console\n(.*?){FENCE}", open("README.md").read(), re.S)
-fails = 0
-for bi, block in enumerate(blocks):
-    lines = block.rstrip("\n").split("\n")
-    i = 0
-    while i < len(lines):
-        if lines[i].startswith("$ "):
-            cmd = re.split(r"\s{4,}#", lines[i][2:])[0]
-            args = shlex.split(cmd)[1:]
-            out = []
-            j = i + 1
-            while j < len(lines) and not lines[j].startswith("$ "):
-                out.append(lines[j]); j += 1
-            p = subprocess.run([B] + args, capture_output=True, text=True)
-            got = (p.stdout + p.stderr).rstrip("\n").split("\n")
-            want = list(out)
-            while want and want[-1].strip() == "":
-                want.pop()
-            if got != want:
-                fails += 1
-                print(f"BLOCK {bi} MISMATCH: {cmd}")
-                print("  WANT:", want)
-                print("  GOT :", got)
-            i = j
-        else:
-            i += 1
-print("blocks:", len(blocks), "fails:", fails)
+def check(path):
+    blocks = re.findall(f"{FENCE}console\n(.*?){FENCE}", open(path).read(), re.S)
+    fails = 0
+    for bi, block in enumerate(blocks):
+        lines = block.rstrip("\n").split("\n")
+        i = 0
+        while i < len(lines):
+            if lines[i].startswith("$ "):
+                cmd = re.split(r"\s{4,}#", lines[i][2:])[0]
+                args = shlex.split(cmd)[1:]
+                out = []
+                j = i + 1
+                while j < len(lines) and not lines[j].startswith("$ "):
+                    out.append(lines[j]); j += 1
+                p = subprocess.run([B] + args, capture_output=True, text=True)
+                got = (p.stdout + p.stderr).rstrip("\n").split("\n")
+                want = list(out)
+                while want and want[-1].strip() == "":
+                    want.pop()
+                if got != want:
+                    fails += 1
+                    print(f"{path} BLOCK {bi} MISMATCH: {cmd}")
+                    print("  WANT:", want)
+                    print("  GOT :", got)
+                i = j
+            else:
+                i += 1
+    print(path, "blocks:", len(blocks), "fails:", fails)
+
+for f in ("README.md", "README.zh-CN.md"):
+    check(f)
 ```
 
 ## 已完成的基线（本目录建立时的状态）

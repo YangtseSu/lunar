@@ -1,5 +1,7 @@
 # lunar
 
+English | [简体中文](README.zh-CN.md)
+
 A command-line wrapper around [`lunar-rs`](https://crates.io/crates/lunar-rs), the
 pure-Rust 寿星天文历 engine. It exposes three subcommands — two modelled on the
 Unix tools they are named after, and one the tools have no counterpart for:

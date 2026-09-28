@@ -226,7 +226,9 @@ Invariants, in the order they are easiest to break:
   `15:30` of its own** — and is refused under `-l` rather than dropped.
 - **Adding a `-f` token:** extend the `match` in `format.rs` **and** all three
   tables — the module doc, `FORMAT_HELP` (`src/main.rs`) and the README table.
-  `--help-format` must list every token; the suite checks it does.
+  `--help-format` must list every token; the suite checks it does. The Chinese
+  README carries the same table, so the count is four, not three;
+  `the_chinese_readme_stays_a_translation` is what keeps them in step.
 - **The 黄历 is one block, and `-a` is its only switch.** `calendar::almanac`
   builds the whole set of `label: text` lines; there is no per-group flag and
   none may be added — a reader asking for 冲煞 gets 冲煞, not a fifth of the
@@ -342,8 +344,10 @@ locale is set: the tool speaks Simplified Chinese unconditionally.
 - **Copy expected output from a real run.** The column width is per-grid (the
   widest cell that month holds), so hand-computed padding is wrong by
   construction. A few tests pin whole grids byte-for-byte as raw strings.
-- **The README's `console` blocks are executable samples.** Every `$ lunar …`
-  line must reproduce byte-for-byte; re-verify after any behaviour change.
+- **The READMEs' `console` blocks are executable samples.** Every `$ lunar …`
+  line in `README.md` *and* `README.zh-CN.md` must reproduce byte-for-byte;
+  re-verify after any behaviour change. The translation is a copy, so it
+  rots the moment one of them is edited and the other is not.
 - **The reference day is not a testable input.** `tz::today()` is the only
   source; pin the *mechanism* instead, as
   `the_statutory_calendar_and_the_reference_day_compose` does (a combined run

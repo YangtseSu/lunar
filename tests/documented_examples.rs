@@ -3355,3 +3355,51 @@ fn the_true_solar_time_caveat_is_documented() {
     }
     assert!(readme.contains("钟表时"), "the README must name the clock");
 }
+
+/// The Chinese README is a translation, and a translation rots quietly: the
+/// English one gets the behaviour change, the Chinese one keeps the sentence
+/// that described the old behaviour. Nothing else in the suite can see that,
+/// so the two documents have to agree on the table of contents, and the
+/// translation has to carry the same statement about the clock.
+#[test]
+fn the_chinese_readme_stays_a_translation() {
+    let english = include_str!("../README.md");
+    let chinese = include_str!("../README.zh-CN.md");
+
+    /// The shape of the document, not its words: a heading level and the
+    /// literal tokens inside it, with the prose dropped — a translation
+    /// renames a section and cannot invent one.
+    fn skeleton(doc: &str) -> Vec<String> {
+        doc.lines()
+            .filter(|line| line.starts_with('#'))
+            .map(|line| {
+                let level = line.len() - line.trim_start_matches('#').len();
+                let kept = line
+                    .split_whitespace()
+                    .filter(|word| word.starts_with('`') || word.starts_with('%'))
+                    .collect::<Vec<_>>()
+                    .join(" ");
+                format!("{level} {kept}")
+            })
+            .collect()
+    }
+    assert_eq!(
+        skeleton(english),
+        skeleton(chinese),
+        "README.md and README.zh-CN.md disagree on the table of contents"
+    );
+
+    for (name, doc) in [("README.md", english), ("README.zh-CN.md", chinese)] {
+        assert!(doc.contains("真太阳时"), "{name} does not say 真太阳时");
+        assert!(doc.contains("钟表时"), "{name} must name the clock");
+    }
+
+    assert!(
+        english.contains("[简体中文](README.zh-CN.md)"),
+        "the English README does not link the translation"
+    );
+    assert!(
+        chinese.contains("[English](README.md)"),
+        "the Chinese README does not link back"
+    );
+}
