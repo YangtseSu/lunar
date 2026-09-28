@@ -51,6 +51,15 @@ $ lunar bazi 1990-06-15T10:30 | tail -2
 
 ## 实施步骤
 
+0. **先拆 `write_chart`，再动它。** `src/commands/bazi.rs` 的 `write_chart` 现有
+   100 余行，连续三轮修改（计划 09 → 10 → 起运余数修正）期间**两次误删输出行**，
+   每次都由 pinned 测试当场抓到。按三类拆开，四列行的截断逻辑只留一处：
+   - `write_pillar_rows(eight, has_time, out)` —— 四柱 + 十神/藏干/纳音/地势，
+     含三柱模式下的统一 `truncate`；
+   - `write_ming_jun(eight, has_time, out)` —— 胎元/胎息/命宫/身宫（第 2 步新增）；
+   - `write_yun(eight, gender, out)` —— 起运 + 大运，含无性别时的说明行。
+   **本步只搬移代码，不改任何输出**：测试数与 README 校验（`fails: 0`）在搬移前后
+   必须完全一致，否则说明搬错了。实施时以 `cargo test` 的实际计数填写，不照抄本句。
 1. `src/calendar.rs`：无需新包装（`EightChar` 的方法经 `eight_char` 已可达），
    但五行 / 旬空 / 地支十神 建议各加一个 `&EightChar -> [String; 4]` 形状的包装，
    使「四列一行」的排版只有一处。

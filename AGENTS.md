@@ -280,6 +280,13 @@ Invariants, in the order they are easiest to break:
   exits 0 — the same choice a missing time of day makes about the 时柱.
   `calendar::yun` takes `&EightChar`, not `&Lunar`, because `EightChar` borrows
   the `Lunar` it reads.
+- **`bazi`'s `write_chart` is a sequence of `writeln!` calls and has lost lines
+  twice.** Three rounds of change deleted a row each time, caught only because
+  the suite pins the whole chart byte-for-byte. It is split per plan 11 step 0
+  into pillar rows, 命局 and 大运; keep it that way. When editing it, the pinned
+  chart in `bazi_prints_four_pillars_only_with_a_time` is the contract — if the
+  output is meant to change, that test is what must be updated first, never
+  after the fact.
 
 ## Testing & QA
 
