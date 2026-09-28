@@ -37,6 +37,12 @@
 //! time resolves the day that time falls on in *that* zone — which is not
 //! always the reference day.
 //!
+//! [`parse_moment`] is the one reader that **keeps** the clock, for
+//! `lunar bazi`: a 时柱 cannot be answered without one. It shares this
+//! grammar rather than a second one, so every form `parse` takes it takes
+//! too, with the same failure — and a form that names no clock reads as no
+//! clock, which is a fact about the input rather than a default.
+//!
 //! The fixed-width shapes are claimed on a **word boundary**, not on a digit
 //! count: the compact `YYYYMMDD` form needs its eight digits to end the token,
 //! so a bare timestamp (`1758240000`) and a relative offset (`2147483647 days`)
@@ -245,6 +251,76 @@ pub fn parse(input: &str, reference: CivilDate, calendar: Calendar) -> Result<Ci
         return Ok(result);
     }
     parse_relative(&lower, reference, input)
+}
+
+/// A civil date **with** a time of day, as `lunar bazi` needs it.
+///
+/// [`parse`] keeps only the day — a calendar tool has nothing to do with a
+/// clock — but 四柱 has a 时柱, so this carries what [`finish`] already
+/// reads and then discards. The grammar is the same one: `parse_moment`
+/// calls [`parse`] for the day and reads the clock off the same suffix, so
+/// a form one accepts the other accepts too, with the same failure.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Moment {
+    /// The day the instant falls on.
+    pub day: CivilDate,
+    /// `hour * 3600 + minute * 60`, or `None` when no time was written.
+    ///
+    /// `None` is the honest answer for `1990-06-15`: the day is named, the
+    /// clock is not, and a 时柱 invented from it would be a fabrication.
+    /// Seconds are dropped — no 时辰 turns on a second, and `date` already
+    /// truncates them.
+    pub seconds_of_day: Option<i32>,
+}
+
+/// Parses `input` keeping the time of day, for `lunar bazi`.
+///
+/// Only the absolute 公历 shapes carry a time, which is the same restriction
+/// [`parse`] places on one: a keyword, an `@epoch`, a weekday and a relative
+/// offset all name an instant the tool cannot put a clock to. A bare `15:30`
+/// applies to the reference day and *is* kept, since that is a clock written
+/// for itself.
+pub fn parse_moment(input: &str, reference: CivilDate) -> Result<Moment, CalError> {
+    // `parse` is the authority on whether the string is a date at all, and it
+    // has already read the suffix as part of that. Reading the clock back off
+    // the same text cannot contradict it: a shape `parse` rejects never
+    // reaches the second line, and one it accepts has a clock or has none.
+    let day = parse(input, reference, Calendar::Civil)?;
+    Ok(Moment {
+        day,
+        seconds_of_day: clock_of(input),
+    })
+}
+
+/// The clock a `-d` string wrote, or `None` when it named none.
+///
+/// The scan mirrors [`finish`]: an ISO or compact date takes a trailing `T`
+/// or space-separated time, and a clock written as itself is a clock too.
+fn clock_of(input: &str) -> Option<i32> {
+    let lower = input.trim().to_ascii_lowercase();
+    // The `T` or space that opens a trailing clock, which is the same
+    // boundary `finish` splits on. Every other shape has no clock.
+    let Some((split, _)) = lower.char_indices().find(|(_, c)| *c == 't' || *c == ' ') else {
+        // A clock written as itself, `15:30`, applies to the reference day.
+        // The **colon** is what makes it one, and it has to be required here
+        // for the reason `parse_absolute` requires it: `split_zone` reads the
+        // `-` in `2025-01-29` as a zone sign and leaves `2025`, which the
+        // compact `hhmm` branch would then take as 20:25 — a clock nobody
+        // wrote, invented for every bare hyphenated date.
+        let (clock, _) = split_zone(&lower);
+        return match clock.contains(':') {
+            true => clock_seconds(clock),
+            false => None,
+        };
+    };
+    let (clock, _) = split_zone(&lower[split + 1..]);
+    clock_seconds(clock)
+}
+
+/// A parsed clock as seconds from midnight, or `None` if there is no clock.
+fn clock_seconds(clock: &str) -> Option<i32> {
+    let (hour, minute, _) = parse_clock(clock)?;
+    Some(hour * 3600 + minute * 60)
 }
 
 /// Reads a year / month / day given as three separate integers — the

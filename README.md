@@ -1,8 +1,8 @@
 # lunar
 
 A command-line wrapper around [`lunar-rs`](https://crates.io/crates/lunar-rs), the
-pure-Rust 寿星天文历 engine. It exposes two subcommands modelled on the Unix tools
-they are named after:
+pure-Rust 寿星天文历 engine. It exposes three subcommands — two modelled on the
+Unix tools they are named after, and one the tools have no counterpart for:
 
 - **`lunar date`** — one day's almanac: 公历 / 星期 / 农历 / 干支 / 生肖 / 节气 /
   法定 / 星座, queryable from either calendar, with a custom `-f` format engine
@@ -10,6 +10,9 @@ they are named after:
 - **`lunar cal`** — `cal(1)`-style month and year grids overlaid with lunar days,
   solar terms, festivals and the statutory calendar (放假 / 调休), over civil
   months or, with `-L`, lunar months.
+- **`lunar bazi`** — 生辰八字: the four pillars of a birth moment, with 十神,
+  藏干, 纳音 and 地势. The only command that keeps a clock, because the 时柱
+  needs one.
 
 Every calendar answer — the solar↔lunar conversion, the 24 solar terms, ganzhi,
 the festival tables, the 黄历 (宜忌 / 冲煞 / 神煞 / 星宿 / 纳音 / 方位) and the
@@ -378,6 +381,69 @@ so a window crosses the lunar new year too: `cal -L 2026 12 -n 3` prints
 丙午年 腊月, 丁未年 正月, 丁未年 二月, each grid titled with its own ganzhi year.
 A window that reaches past 1–9999 is reported, never clipped.
 
+## `lunar bazi`
+
+生辰八字 — the four pillars of a birth moment, with 十神, 藏干, 纳音 and
+地势. It is the one command that keeps a clock, because one of the four pillars
+is the 时柱 and a chart without it is not a chart:
+
+```console
+$ lunar bazi 1990-06-15T10:30
+公历: 1990年6月15日 10:30
+农历: 庚午年五月廿三
+八字: 庚午 / 壬午 / 辛亥 / 癸巳
+十神: 劫财 / 伤官 / 日主 / 食神
+藏干: 丁己 / 丁己 / 壬甲 / 丙庚戊
+纳音: 路旁土 / 杨柳木 / 钗钏金 / 长流水
+地势: 病 / 病 / 沐浴 / 死
+```
+
+With no time of day there is no 时柱, and the tool says so rather than inventing
+one — a clock read off a date the user did not write would be a fabrication:
+
+```console
+$ lunar bazi 1990-06-15
+公历: 1990年6月15日
+农历: 庚午年五月廿三
+八字: 庚午 / 壬午 / 辛亥
+说明: 未给时刻，无时柱
+十神: 劫财 / 伤官 / 日主
+藏干: 丁己 / 丁己 / 壬甲
+纳音: 路旁土 / 杨柳木 / 钗钏金
+地势: 病 / 病 / 沐浴
+```
+
+The date is read by the same grammar `lunar date -d` uses, so every form is
+accepted here too — `1990-06-15 10:30`, `19900615T1030`, `1990/06/15 10:30` and
+`1990-06-15T10:30+08:00` are one instant. A keyword (`yesterday`) and a
+relative offset (`2 days ago`) name a day and no clock, exactly as in `date`.
+There is no `-l`: a birth moment is a civil instant, and there is no 农历 time of
+day to read one in.
+
+**The 月柱 turns at the 節氣 instant here, where `lunar date` turns it at the
+節氣 day — and both are right, because they answer different questions.** 白露
+2026 falls at 22:41:16, so a birth at 20:00 that day is 申月 and one at 23:00 is
+酉月, while the day's own almanac calls the whole of 09-07 酉月:
+
+```console
+$ lunar bazi 2026-09-07T20:00
+公历: 2026年9月7日 20:00
+农历: 丙午年七月廿六
+八字: 丙午 / 丙申 / 甲申 / 甲戌
+十神: 食神 / 食神 / 日主 / 比肩
+藏干: 丁己 / 庚壬戊 / 庚壬戊 / 戊辛丁
+纳音: 天河水 / 山下火 / 泉中水 / 山头火
+地势: 死 / 绝 / 绝 / 养
+```
+
+The 年柱 and 日柱 are the same facts `lunar date` prints, on the same basis, so
+the two commands never disagree about them — including the 子时 that belongs to
+the day it began in rather than the day it ended.
+
+大运 is deliberately absent: it needs a gender, and its 起运 is a count of months
+whose rule differs between schools. That is a separate question from the chart
+itself.
+
 ## Supported range
 
 Years **1–9999**, the window `lunar-rs` can serve: its astronomy is bounded by
@@ -430,7 +496,7 @@ purpose with the reason for each.
 | `src/datestr.rs` | the `date(1)`-style `-d` grammar |
 | `src/format.rs` | the `-f` token engine |
 | `src/tz.rs` | local "today" from `TZ` / the system zone |
-| `src/commands/` | the two subcommand surfaces |
+| `src/commands/` | the three subcommand surfaces |
 
 Command modules never print: they append to a `String` that `main` writes to
 stdout once, so a failure anywhere prints nothing and exits non-zero.

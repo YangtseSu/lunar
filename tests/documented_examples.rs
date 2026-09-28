@@ -2872,3 +2872,155 @@ fn zhongyuan_is_shown_on_the_lunar_seventh_full_moon() {
         lines[row + 1]
     );
 }
+
+/// A birth moment with a time of day gets four pillars, and without one
+/// gets three — never a fourth invented from nothing.
+#[test]
+fn bazi_prints_four_pillars_only_with_a_time() {
+    let chart = run(&["bazi", "1990-06-15T10:30"]);
+    assert_eq!(
+        chart,
+        "公历: 1990年6月15日 10:30\n\
+         农历: 庚午年五月廿三\n\
+         八字: 庚午 / 壬午 / 辛亥 / 癸巳\n\
+         十神: 劫财 / 伤官 / 日主 / 食神\n\
+         藏干: 丁己 / 丁己 / 壬甲 / 丙庚戊\n\
+         纳音: 路旁土 / 杨柳木 / 钗钏金 / 长流水\n\
+         地势: 病 / 病 / 沐浴 / 死"
+    );
+    // No time written: three pillars, and the tool says why.
+    let three = run(&["bazi", "1990-06-15"]);
+    assert!(three.contains("八字: 庚午 / 壬午 / 辛亥\n"), "{three}");
+    assert!(three.contains("说明: 未给时刻，无时柱"), "{three}");
+    assert!(!three.contains("癸巳"), "no 时柱 without a clock:\n{three}");
+    // The rows that are about a pillar must not keep a fourth column.
+    for row in ["十神:", "藏干:", "纳音:", "地势:"] {
+        let line = three
+            .lines()
+            .find_map(|l| l.strip_prefix(row))
+            .unwrap_or_else(|| panic!("{three}: a {row} row"));
+        assert_eq!(
+            line.split(" / ").count(),
+            3,
+            "{row} has three columns without a 时柱, got {line:?}"
+        );
+    }
+}
+
+/// The year and day pillars are the same facts `lunar date` prints, on the
+/// same basis — a chart and a profile of one moment must not disagree.
+#[test]
+fn bazi_and_date_agree_on_the_year_and_day_pillars() {
+    for day in [
+        "1990-06-15",
+        "2020-01-25",
+        "2025-01-29",
+        "2026-02-04",
+        "2026-09-07",
+        "1582-10-15",
+    ] {
+        let profile = run(&["date", "-d", day]);
+        let pillars: Vec<&str> = profile
+            .lines()
+            .find_map(|l| l.strip_prefix("干支: "))
+            .unwrap_or_else(|| panic!("{day}: a 干支 line"))
+            .split(' ')
+            .collect();
+        let chart = run(&["bazi", day]);
+        let drawn: Vec<&str> = chart
+            .lines()
+            .find_map(|l| l.strip_prefix("八字: "))
+            .unwrap_or_else(|| panic!("{day}: an 八字 line"))
+            .split(" / ")
+            .collect();
+        assert_eq!(drawn[0], pillars[0], "{day}: 年柱 is the 干支 line's");
+        assert_eq!(drawn[2], pillars[2], "{day}: 日柱 is the 干支 line's");
+    }
+}
+
+/// The 月柱 turns at the 節氣 **instant** here, where `lunar date` turns it
+/// at the 節氣 **day** — and both are right. 白露 2026 is 22:41:16, so a
+/// birth at 20:00 that day is 申月 and one at 23:00 is 酉月, while the day's
+/// own almanac calls the whole of 09-07 酉月.
+#[test]
+fn the_bazi_month_turns_at_the_solar_term_instant() {
+    let before = run(&["bazi", "2026-09-07T20:00"]);
+    let after = run(&["bazi", "2026-09-07T23:00"]);
+    assert!(
+        before.contains("八字: 丙午 / 丙申 / 甲申"),
+        "before 白露 is still 申月:\n{before}"
+    );
+    assert!(
+        after.contains("八字: 丙午 / 丁酉 / 甲申"),
+        "after 白露 is 酉月:\n{after}"
+    );
+    // `date` names the whole day, so its 干支 line is 酉月 at 09-07.
+    assert!(
+        run(&["date", "-d", "2026-09-07"]).contains("干支: 丙午 丁酉 甲申"),
+        "the day's own 干支 line turns at the day"
+    );
+}
+
+/// A 子时 belongs to the day it began in, in both commands: 23:30 on the
+/// 15th is still the 15th's day pillar, and 00:30 on the 16th is the 16th's.
+#[test]
+fn a_zi_hour_belongs_to_the_day_it_began_in() {
+    assert!(
+        run(&["bazi", "1990-06-15T23:30"]).contains("八字: 庚午 / 壬午 / 辛亥 / 庚子"),
+        "23:30 on the 15th keeps the 15th's 日柱"
+    );
+    assert!(
+        run(&["bazi", "1990-06-16T00:30"]).contains("八字: 庚午 / 壬午 / 壬子 / 庚子"),
+        "00:30 on the 16th has the 16th's 日柱, and both are 子"
+    );
+    assert!(run(&["date", "-d", "1990-06-15"]).contains("干支: 庚午 壬午 辛亥"));
+    assert!(run(&["date", "-d", "1990-06-16"]).contains("干支: 庚午 壬午 壬子"));
+}
+
+/// A birth moment is read by the same grammar `lunar date -d` uses, so every
+/// date form is taken here too — and a date with no time stays a date.
+#[test]
+fn bazi_reads_the_same_date_forms() {
+    // The hyphen must not be read as a zone sign: `2025` alone is a year,
+    // never the compact clock 20:25.
+    for day in ["2025-01-29", "1990-06-15", "2026-09-07", "1582-10-15"] {
+        let chart = run(&["bazi", day]);
+        assert!(
+            chart.contains("说明: 未给时刻，无时柱"),
+            "{day} names no time, so it must not gain one:\n{chart}"
+        );
+    }
+    // Every writing of the same instant is the same chart.
+    let canonical = run(&["bazi", "1990-06-15T10:30"]);
+    for form in [
+        "1990-06-15 10:30",
+        "1990-06-15T10:30+08:00",
+        "19900615T1030",
+        "1990/06/15 10:30",
+    ] {
+        assert_eq!(
+            run(&["bazi", form]),
+            canonical,
+            "`bazi {form}` is the same instant as `1990-06-15T10:30`"
+        );
+    }
+    // A relative or keyword form names a day and no clock, like `date`.
+    assert!(run(&["bazi", "yesterday"]).contains("说明: 未给时刻，无时柱"));
+    // `-l` is not offered: a birth moment is a civil instant, and there is
+    // no 农历 time of day to read one in.
+    assert!(run_failing(&["bazi", "-l", "1990-06-15"]).contains("unexpected"));
+}
+
+/// The failures `bazi` reports are the ones `date` reports for the same
+/// string, because the grammar is shared.
+#[test]
+fn bazi_refuses_what_date_refuses() {
+    for bad in ["not-a-date", "2023-02-30", "1582-10-10", "1990-06-15T25:00"] {
+        assert_eq!(
+            run_failing(&["bazi", bad]),
+            run_failing(&["date", "-d", bad]),
+            "`bazi {bad}` fails as `date -d {bad}` does"
+        );
+    }
+    assert!(run_failing(&["bazi", "1990", "6", "15", "10"]).contains("位置参数过多"));
+}

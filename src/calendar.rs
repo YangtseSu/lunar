@@ -8,7 +8,7 @@ use std::fmt;
 use std::sync::Arc;
 
 use lunar_rs::solar_util;
-use lunar_rs::{Holiday, Lunar, LunarFestival, LunarMonth, LunarYear, Solar};
+use lunar_rs::{EightChar, Holiday, Lunar, LunarFestival, LunarMonth, LunarYear, Solar};
 
 use crate::civil::CivilDate;
 
@@ -79,6 +79,11 @@ pub enum CalError {
     /// A relative offset shorter than a day, which cannot move a date-only
     /// answer. Carries the unit as written, e.g. `minutes`.
     SubDayUnit { unit: String },
+    /// A time of day outside `00:00`–`23:59`, as `lunar bazi` writes one.
+    ///
+    /// Carries the two fields as written, so the message names the number
+    /// the user typed rather than a normalized one.
+    BadTimeOfDay { hour: i32, minute: i32 },
     /// A positional argument that is not a number, or one too many of them.
     /// Carries the offending text, empty when the count is what is wrong.
     BadArgument { detail: String },
@@ -127,6 +132,9 @@ impl CalError {
             ),
             Self::SubDayUnit { unit } => {
                 format!("日期偏移单位 {unit} 不足一天，本工具只输出日期")
+            }
+            Self::BadTimeOfDay { hour, minute } => {
+                format!("时刻 {hour}:{minute:02} 非法 (应为 00:00–23:59)")
             }
             Self::UnparsableDate { input } => format!("无法解析的日期: {input}"),
             Self::BadTimeZone { source } => format!("无法读取时区: {source}"),
@@ -213,6 +221,42 @@ pub fn solar(year: i32, month: i32, day: i32) -> Result<Solar, CalError> {
         lunar_rs::LunarError::GregorianGap { .. } => CalError::YearMissing { year },
         _ => CalError::NonexistentDate { year, month, day },
     })
+}
+
+/// A [`Solar`] carrying a time of day, which [`solar`] has no room for.
+///
+/// Same range checks and the same two failure answers as [`solar`]; the
+/// engine models the 1582 reform either way. The clock is checked here
+/// rather than left to the engine, because `lunar-rs` takes an `i32` per
+/// field and an hour of 25 would otherwise become a 时柱 without complaint.
+pub fn solar_at(
+    year: i32,
+    month: i32,
+    day: i32,
+    hour: i32,
+    minute: i32,
+) -> Result<Solar, CalError> {
+    check_year(year)?;
+    check_month(month)?;
+    check_day(day)?;
+    if !(0..24).contains(&hour) || !(0..60).contains(&minute) {
+        return Err(CalError::BadTimeOfDay { hour, minute });
+    }
+    Solar::from_ymd_hms(year, month, day, hour, minute, 0).map_err(|error| match error {
+        lunar_rs::LunarError::GregorianGap { .. } => CalError::YearMissing { year },
+        _ => CalError::NonexistentDate { year, month, day },
+    })
+}
+
+/// The four pillars of a birth moment.
+///
+/// The engine's `EightChar` defaults to the 立春 year and month basis
+/// (`sect = 2`), which is the basis the `干支` line prints — see
+/// [`li_chun_year_gan_zhi`] — so a 八字 and a `lunar date` of the same
+/// moment agree on 年柱 and 月柱, including the 子时 that still belongs to
+/// the day it began in.
+pub fn eight_char(lunar: &Lunar) -> EightChar<'_> {
+    lunar.eight_char()
 }
 
 /// Whether `month` is a lunar month number: `1..=12`, a negative number

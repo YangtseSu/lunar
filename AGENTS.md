@@ -4,23 +4,31 @@
 
 `lunar` is a thin command-line wrapper around the
 [`lunar-rs`](https://crates.io/crates/lunar-rs) 寿星天文历 engine. It exists to
-display, query and convert the Chinese lunisolar calendar, through two
-subcommands modelled on the Unix tools they are named after:
+display, query and convert the Chinese lunisolar calendar, through three
+subcommands — two modelled on the Unix tools they are named after, and one the
+tools have no counterpart for:
 
 - **`lunar date`** — one day's almanac (公历 / 星期 / 农历 / 干支 / 生肖 / 节气 /
   法定 / 星座), with `date(1)`-style input (`-d`), a `-f` format engine and a
   `-a` 黄历 block;
 - **`lunar cal`** — `cal(1)`-style month and year grids overlaid with lunar days,
   solar terms, festivals and the statutory calendar, over civil months or, with
-  `-L`, lunar months.
+  `-L`, lunar months;
+- **`lunar bazi`** — 生辰八字: the four pillars of a birth moment, with 十神,
+  藏干, 纳音 and 地势.
 
 **This repository never implements calendar arithmetic.** It parses arguments,
 shapes `lunar-rs` output and lays out grids. That is the whole job. When the
 engine and this tool disagree, the engine is right; when the engine lacks
 something, fix it upstream, not here.
 
-Non-goals: a library crate, a clock or time-of-day, a language layer, async,
-weekday-derived holiday guesses. Do not add one without being asked.
+Non-goals: a library crate, a clock in `date` or `cal`, a language layer, async,
+weekday-derived holiday guesses, 大运. Do not add one without being asked.
+
+`lunar bazi` is the single exception to the no-clock rule, and it exists
+because a 时柱 cannot exist without one: it reads a time of day, keeps it, and
+prints four pillars, while a birth moment with no clock prints three and says
+so. `date` and `cal` still answer for a day alone.
 
 Behaviour that differs from `cal(1)` / `date(1)` is a bug with a plan, not a
 feature: the open ones live in [`docs/plans`](docs/plans).
@@ -93,13 +101,16 @@ Each module has one job and the dependency direction is one-way:
 graph TD
   A[main.rs<br/>clap Cli/Command<br/>ExitCode] --> B[commands/date.rs]
   A --> C[commands/cal.rs]
+  A --> N[commands/bazi.rs]
   A --> D[tz.rs]
   B --> E[datestr.rs]
+  N --> E
   B --> F[format.rs]
   C --> G[calgrid.rs]
   G --> H[cell.rs]
   B --> I[calendar.rs]
   C --> I
+  N --> I
   I --> J[lunar-rs]
   G --> L[lang.rs<br/>width/pad_right]
   G --> M[mark.rs<br/>Mark/Color/paint]
@@ -110,26 +121,29 @@ graph TD
   E --> K
 ```
 
+`bazi` is a peer of the other two, not a group of `date`'s: it shares
+`datestr` (one grammar) and `calendar` (one engine boundary) and nothing else.
+
 | Path | Role |
 |---|---|
 | `src/calendar.rs` | the only `lunar-rs` boundary: `CalError`, `MIN_YEAR`/`MAX_YEAR`, one-line wrappers |
 | `src/civil.rs` | proleptic-Gregorian epoch ↔ civil bridge (Hinnant), `CivilDate` stepping; the engine models the 1582 reform and refuses 1582-10-05..=14, which the parser and grids must cross |
 | `src/calgrid.rs` | grid layout: `Entry`/`Grid`, `GUTTER`, pitch, `render`; each cell carries its `Mark` |
 | `src/cell.rs` | cell content priority, `CellStyle` |
-| `src/datestr.rs` | the `-d` grammar |
+| `src/datestr.rs` | the `-d` grammar; `parse` drops the clock, `parse_moment` keeps it for `bazi` |
 | `src/format.rs` | the `-f` token engine |
 | `src/lang.rs` | display-width measurement and `pad_right` |
 | `src/mark.rs` | `Mark`, `Color`, `paint` — the only place SGR is written |
-| `src/commands/` | the two subcommand implementations |
+| `src/commands/` | the three subcommand implementations |
 | `src/tz.rs` | local "today" from `TZ` / the system zone |
 
 **Data flow.** `main()` parses clap, prints `--help-format` early if asked,
 resolves `today` once via `tz::today()`, builds one `String`, dispatches to
-`date::run` / `cal::run`, and writes the buffer once. On `Err` it prints
-`lunar: {error}` to stderr, returns `ExitCode::FAILURE`, and **discards the
-buffer** — a mid-loop failure in `cal` prints nothing on stdout.
+`date::run` / `cal::run` / `bazi::run`, and writes the buffer once. On `Err` it
+prints `lunar: {error}` to stderr, returns `ExitCode::FAILURE`, and **discards
+the buffer** — a mid-loop failure in `cal` prints nothing on stdout.
 
-Both commands share the signature:
+All three commands share the signature:
 
 ```rust
 pub fn run(args: &XArgs, today: CivilDate, out: &mut String) -> Result<(), CalError>
@@ -141,6 +155,12 @@ Invariants, in the order they are easiest to break:
 
 - **`calendar.rs` is the only path to `lunar-rs` for calendar answers.** New
   wrappers go there, and they either shape output or adapt a quirk.
+- **A wrapper that adapts a quirk earns its place; one that only forwards
+  does not.** `calendar::eight_char` takes a `&Lunar`, not a `&Solar`,
+  because `EightChar` borrows the `Lunar` it reads — a `&Solar` would have to
+  build a temporary and hand back a borrow of it. `calendar::solar_at` is the
+  one constructor that carries a clock, and it range-checks the clock itself
+  because `lunar-rs` takes an `i32` per field and would not.
 - **The two injection points are `today: CivilDate` and the `CellStyle` value
   struct.** Flags are mapped to `CellStyle` in exactly one place, `cal::run`. The
   `Color` mode is resolved in `main` and passed beside `today`; no module reads
@@ -214,9 +234,11 @@ Invariants, in the order they are easiest to break:
   **omitted** when the engine has no value, the same way the `节气` line is. The
   block is `conflicts_with = "format"`: the profile, the block and `-f` are three
   shapes of one answer, and only one of them prints. A field that depends on a
-  time of day (`time_yi`, `time_chong`) is out of scope by the no-clock rule, and
-  `lunar cal` never shows the block — a cell has room for a label, not a
-  黄历.
+  time of day (`time_yi`, `time_chong`) is out of scope — the block answers
+  about a **day**, and `lunar bazi` is where a time of day is read at all — and
+  `lunar cal` never shows the block: a cell has room for a label, not a 黄历.
+  The block is never a group of `bazi`'s either; a chart and a day's almanac are
+  different answers to different questions.
 - **Adding a `cal` flag:** map it to `CellStyle` in `cal::run`, the single seam;
   do not grow a second configuration path.
 - **Span semantics are `cal(1)`'s, and `span_of` is the one place they live.**
@@ -232,6 +254,19 @@ Invariants, in the order they are easiest to break:
   read differently: the first names the year the window reached, the second
   the month that crosses. A lunar month is never clipped to fit the range —
   a clipped grid and `lunar date` would answer differently about one day.
+- **`lunar bazi` reads a time of day, and the 月柱 turns at the 節氣
+  *instant*.** The engine's `EightChar` is instant-based throughout, which is
+  right for a birth: 白露 at 22:41 puts a 20:00 birth in 申月 and a 23:00 one
+  in 酉月, while the `干支` line of `date` — which names a *day* — calls the
+  whole of 09-07 酉月. The two differ on each 節氣 day and agree on the rest;
+  do not "fix" one to match the other. The 年柱 and 日柱 *are* shared with
+  `date`, and must stay so.
+- **A birth moment with no clock has no 时柱.** `bazi` prints three pillars and
+  a `说明` line saying so; it never supplies a clock of its own. The trap is
+  `split_zone` reading the `-` in `2025-01-29` as a zone sign and leaving
+  `2025`, which the compact `hhmm` branch of `parse_clock` would then read as
+  20:25 — so a bare clock must be required to carry a colon, exactly as
+  `parse_absolute` already does. A 子时 belongs to the day it began in.
 
 ## Testing & QA
 

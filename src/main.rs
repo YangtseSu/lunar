@@ -1,12 +1,15 @@
 //! `lunar` — a Chinese lunisolar calendar command line tool.
 //!
-//! Two subcommands, both powered by the `lunar-rs` calendar engine:
+//! Three subcommands, all powered by the `lunar-rs` calendar engine:
 //!
 //! * `lunar date` — one day's almanac profile
 //!   (公历/星期/农历/干支/生肖/节气/法定/星座), with a custom format mode and
 //!   a `-a` 黄历 block
 //! * `lunar cal` — month and year grids with lunar days, solar terms and
 //!   festivals, over civil months or, with `-L`, lunar months
+//! * `lunar bazi` — 生辰八字: the four pillars of a birth moment, with
+//!   十神 / 藏干 / 纳音 / 地势. The only command that reads a time of day,
+//!   because the 时柱 needs one
 //!
 //! Supported years are 1–9999, the window `lunar-rs` can serve.
 
@@ -26,7 +29,7 @@ use std::process::ExitCode;
 
 use clap::{ArgAction, Parser, Subcommand};
 
-use crate::commands::{cal, date};
+use crate::commands::{bazi, cal, date};
 
 /// Token help, printed by `lunar date --help-format`.
 const FORMAT_HELP: &str = concat!(
@@ -44,8 +47,8 @@ const FORMAT_HELP: &str = concat!(
     "例: lunar date -f '%G年%M%N，星期%A，%Q' -d 2026-09-07",
 );
 
-/// A Chinese lunisolar calendar CLI: `date`-style day profiles and `cal`-style
-/// grids.
+/// A Chinese lunisolar calendar CLI: `date`-style day profiles, `cal`-style
+/// grids, and `bazi` birth charts.
 #[derive(Debug, Parser)]
 #[command(name = "lunar", version, about, long_about = None)]
 struct Cli {
@@ -88,6 +91,13 @@ enum Command {
 
         /// 位置参数：年 月 日（或只给字符串日期）
         #[arg(value_name = "年 月 日")]
+        positional: Vec<String>,
+    },
+
+    /// 生辰八字（四柱十神），可带时刻
+    Bazi {
+        /// 生辰，date 风格，可带时刻，如 '1990-06-15T10:30'（缺省为今天）
+        #[arg(value_name = "生辰")]
         positional: Vec<String>,
     },
 
@@ -198,6 +208,13 @@ fn main() -> ExitCode {
                 almanac: *almanac,
                 lunar: *lunar,
                 leap: *leap,
+                positional: positional.clone(),
+            },
+            today,
+            &mut out,
+        ),
+        Command::Bazi { positional } => bazi::run(
+            &bazi::BaziArgs {
                 positional: positional.clone(),
             },
             today,
