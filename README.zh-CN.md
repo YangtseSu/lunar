@@ -28,6 +28,33 @@ cargo build --release
 ./target/release/lunar cal
 ```
 
+## 安装
+
+提供 Linux x86_64 与 aarch64 的静态二进制，用 musl 构建，不依赖发行版的 glibc 版本：
+
+```bash
+# x86_64
+curl -LO https://github.com/YangtseSu/lunar/releases/download/v0.1.0/lunar-0.1.0-x86_64.tar.gz
+tar -xzf lunar-0.1.0-x86_64.tar.gz && sudo install -m755 lunar-0.1.0-x86_64/lunar /usr/local/bin/
+
+# aarch64
+curl -LO https://github.com/YangtseSu/lunar/releases/download/v0.1.0/lunar-0.1.0-aarch64.tar.gz
+tar -xzf lunar-0.1.0-aarch64.tar.gz && sudo install -m755 lunar-0.1.0-aarch64/lunar /usr/local/bin/
+```
+
+每个 release 都带一份 `SHA256SUMS`，安装前先校验：
+
+```bash
+curl -LO https://github.com/YangtseSu/lunar/releases/download/v0.1.0/SHA256SUMS
+sha256sum -c SHA256SUMS
+```
+
+或从源码安装：
+
+```bash
+cargo install --git https://github.com/YangtseSu/lunar
+```
+
 ## `lunar date`
 
 ```console

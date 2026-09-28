@@ -1,0 +1,131 @@
+name: release
+
+# A tag is a release. `v0.1.0` is cut from `Cargo.toml`'s version, which clap
+# already reports through `lunar --version`, so the number is written once.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to publish (e.g. v0.1.0)"
+        required: true
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  # Native runners, not cross: GitHub hosts both architectures, each image
+  # ships Rust 1.98.1 and rustup, and `cross` would mean a docker image per
+  # target plus a layer of tooling to keep alive for two builds.
+  build:
+    name: build ${{ matrix.arch }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-26.04
+            arch: x86_64
+            target: x86_64-unknown-linux-musl
+          - os: ubuntu-26.04-arm
+            arch: aarch64
+            target: aarch64-unknown-linux-musl
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Cache cargo and target
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: ${{ runner.os }}-release-${{ matrix.target }}-${{ hashFiles('**/Cargo.lock') }}
+
+      # musl, not the distro's glibc: a statically linked binary runs on any
+      # Linux regardless of how old its glibc is, which is the whole point of
+      # handing someone a file instead of a build.
+      - name: Build
+        run: cargo build --release --locked --target ${{ matrix.target }}
+
+      - name: Smoke test the binary
+        run: |
+          BIN="target/${{ matrix.target }}/release/lunar"
+          file "$BIN"
+          # No dynamic section, or the static build did not take.
+          ! ldd "$BIN" 2>&1 | grep -qv "not a dynamic executable\|statically linked"
+          # `date` with no arguments reads the reference day, which resolves the
+          # system time zone: that is where `TimeZone::local()` reads tzdb
+          # from, and it is the one runtime input a static binary cannot
+          # carry with it.
+          TZ=Asia/Shanghai "$BIN" date | head -2
+          TZ=UTC "$BIN" date -d 2026-09-07 | head -2
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml)
+          NAME="lunar-${VERSION}-${{ matrix.arch }}"
+          mkdir -p "dist/$NAME"
+          cp "target/${{ matrix.target }}/release/lunar" "dist/$NAME/lunar"
+          cp README.md LICENSE "dist/$NAME/"
+          tar -czf "dist/$NAME.tar.gz" -C dist "$NAME"
+          rm -rf "dist/$NAME"
+          ls -l "dist/$NAME.tar.gz"
+
+      - name: Checksum
+        run: |
+          set -euo pipefail
+          cd dist
+          sha256sum *.tar.gz > "${{ matrix.arch }}.sha256"
+          cat "${{ matrix.arch }}.sha256"
+
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: lunar-${{ matrix.arch }}
+          path: |
+            dist/*.tar.gz
+            dist/*.sha256
+
+  release:
+    name: publish
+    needs: build
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Download
+        uses: actions/download-artifact@v8
+        with:
+          path: dist
+          pattern: lunar-*
+          merge-multiple: true
+
+      - name: Assemble checksums
+        run: |
+          set -euo pipefail
+          cd dist
+          # One manifest over both archives, so `sha256sum -c` covers the
+          # whole release in a single command.
+          cat ./*.sha256 > SHA256SUMS
+          sort -o SHA256SUMS SHA256SUMS
+          cat SHA256SUMS
+          ls -l
+
+      - name: Create the release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          generate_release_notes: true
+          files: |
+            dist/*.tar.gz
+            dist/SHA256SUMS

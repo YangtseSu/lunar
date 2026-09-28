@@ -32,6 +32,34 @@ cargo build --release
 ./target/release/lunar cal
 ```
 
+## Install
+
+Static binaries for Linux x86_64 and aarch64, built with musl so they run on
+any distribution regardless of its glibc version:
+
+```bash
+# x86_64
+curl -LO https://github.com/YangtseSu/lunar/releases/download/v0.1.0/lunar-0.1.0-x86_64.tar.gz
+tar -xzf lunar-0.1.0-x86_64.tar.gz && sudo install -m755 lunar-0.1.0-x86_64/lunar /usr/local/bin/
+
+# aarch64
+curl -LO https://github.com/YangtseSu/lunar/releases/download/v0.1.0/lunar-0.1.0-aarch64.tar.gz
+tar -xzf lunar-0.1.0-aarch64.tar.gz && sudo install -m755 lunar-0.1.0-aarch64/lunar /usr/local/bin/
+```
+
+Each release carries a `SHA256SUMS`; verify it before installing:
+
+```bash
+curl -LO https://github.com/YangtseSu/lunar/releases/download/v0.1.0/SHA256SUMS
+sha256sum -c SHA256SUMS
+```
+
+Or build from source:
+
+```bash
+cargo install --git https://github.com/YangtseSu/lunar
+```
+
 ## `lunar date`
 
 ```console

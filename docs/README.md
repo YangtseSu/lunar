@@ -96,6 +96,7 @@ python3 tools/check_samples.py README.md   # 只校验一个文件
 | 12 | [流年 / 流月 / 小运](plans/12-bazi-liu-nian.md) ✅ | 新增能力 | P2 |
 | 13 | [真太阳时：只做方法论声明](plans/13-true-solar-time.md) ✅ | 文档声明 | P2 |
 | 14 | [GitHub Actions CI](plans/14-github-actions-ci.md) ✅ | 工程设施 | P1 |
+| 15 | [发布 0.1.0：Linux amd64 / arm64 二进制](plans/15-release-0.1.0.md) ✅ | 分发 | P2 |
 
 ✅ = 已实施。
 

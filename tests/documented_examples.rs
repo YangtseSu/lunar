@@ -3487,3 +3487,60 @@ fn dependabot_checks_daily_without_a_real_limit() {
         "a grouped batch merges several bumps into one untested commit"
     );
 }
+
+/// A release is the one place the version number is written down twice — once
+/// in `Cargo.toml`, once in a tag — so both are checked against each other
+/// here, where a mismatch is cheap to find. The two architectures are checked
+/// because dropping one produces a release that looks complete and silently
+/// excludes half the machines, and the install instructions name both files.
+#[test]
+fn the_release_workflow_covers_both_architectures() {
+    let workflow = include_str!("../.github/workflows/release.yml");
+    for want in [
+        "x86_64",
+        "aarch64",
+        "ubuntu-26.04-arm",
+        "x86_64-unknown-linux-musl",
+        "aarch64-unknown-linux-musl",
+        "tags: [\"v*\"]",
+    ] {
+        assert!(
+            workflow.contains(want),
+            "release.yml does not mention {want}"
+        );
+    }
+    // The tag and the manifest have to agree, or the archive is named after one
+    // version and the release page after another.
+    let manifest = include_str!("../Cargo.toml");
+    let version = manifest
+        .lines()
+        .find_map(|line| line.strip_prefix("version = \""))
+        .and_then(|rest| rest.split('"').next())
+        .expect("Cargo.toml carries a version");
+    // The archive is named from the manifest rather than from the tag, so the
+    // name and the release page cannot drift; assert the substitution, not
+    // the exact quoting around it.
+    assert!(
+        workflow.contains("sed -n")
+            && workflow.contains("Cargo.toml")
+            && workflow.contains("NAME=\"lunar-${VERSION}-"),
+        "the archive is not named from Cargo.toml's version"
+    );
+    for (name, doc) in [
+        ("README.md", include_str!("../README.md")),
+        ("README.zh-CN.md", include_str!("../README.zh-CN.md")),
+    ] {
+        assert!(
+            doc.contains(&format!("lunar-{version}-x86_64.tar.gz")),
+            "{name} does not install the {version} x86_64 archive"
+        );
+        assert!(
+            doc.contains(&format!("lunar-{version}-aarch64.tar.gz")),
+            "{name} does not install the {version} aarch64 archive"
+        );
+        assert!(
+            doc.contains("SHA256SUMS"),
+            "{name} does not tell the reader to verify the download"
+        );
+    }
+}
