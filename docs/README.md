@@ -51,48 +51,20 @@ AI 读完该文件即可开工，不需要本目录之外的上下文。
 计划 09 是这条规则下的第一个实例，文件为回填：实现先于规则确立，但按此规则本应
 先立案。
 
-### README 样例校验脚本
+### README 样例校验
 
 `README.md` 与 `README.zh-CN.md` 中每个 console 代码块里的 `$ lunar …` 行都必须与真实
-输出逐字节一致——译文与原文的输出是同一份，抄错一处就是错。在仓库根目录用以下脚本
-校验（实现者可按需另存为本地脚本，不必提交）：
+输出逐字节一致——译文与原文的输出是同一份，抄错一处就是错。校验脚本是仓库里的
+**唯一一份** `tools/check_samples.py`，纯标准库、无依赖、发现任何一处不符即以非零码
+退出：
 
-```python
-import re, subprocess, shlex
-B = "./target/debug/lunar"
-FENCE = "`" * 3
-def check(path):
-    blocks = re.findall(f"{FENCE}console\n(.*?){FENCE}", open(path).read(), re.S)
-    fails = 0
-    for bi, block in enumerate(blocks):
-        lines = block.rstrip("\n").split("\n")
-        i = 0
-        while i < len(lines):
-            if lines[i].startswith("$ "):
-                cmd = re.split(r"\s{4,}#", lines[i][2:])[0]
-                args = shlex.split(cmd)[1:]
-                out = []
-                j = i + 1
-                while j < len(lines) and not lines[j].startswith("$ "):
-                    out.append(lines[j]); j += 1
-                p = subprocess.run([B] + args, capture_output=True, text=True)
-                got = (p.stdout + p.stderr).rstrip("\n").split("\n")
-                want = list(out)
-                while want and want[-1].strip() == "":
-                    want.pop()
-                if got != want:
-                    fails += 1
-                    print(f"{path} BLOCK {bi} MISMATCH: {cmd}")
-                    print("  WANT:", want)
-                    print("  GOT :", got)
-                i = j
-            else:
-                i += 1
-    print(path, "blocks:", len(blocks), "fails:", fails)
-
-for f in ("README.md", "README.zh-CN.md"):
-    check(f)
+```bash
+cargo build && python3 tools/check_samples.py
+python3 tools/check_samples.py README.md   # 只校验一个文件
 ```
+
+脚本**不**在此处内嵌：内嵌一份就会有两份，两份迟早不一致——而这个脚本的全部作用就是
+抓不一致。CI（`.github/workflows/ci.yml` 的 `samples` job）执行的就是仓库里这一个文件。
 
 ## 已完成的基线（本目录建立时的状态）
 
@@ -123,8 +95,20 @@ for f in ("README.md", "README.zh-CN.md"):
 | 11 | [八字补全：五行/旬空/胎元/命宫](plans/11-bazi-fill-in.md) ✅ | 新增能力 | P2 |
 | 12 | [流年 / 流月 / 小运](plans/12-bazi-liu-nian.md) ✅ | 新增能力 | P2 |
 | 13 | [真太阳时：只做方法论声明](plans/13-true-solar-time.md) ✅ | 文档声明 | P2 |
+| 14 | [GitHub Actions CI](plans/14-github-actions-ci.md) ✅ | 工程设施 | P1 |
 
 ✅ = 已实施。
+
+计划 14 交付 `.github/workflows/ci.yml`（`ubuntu-26.04` + `actions/cache`，
+三个验收门 + 样例校验两个 job）与 `tools/check_samples.py`。实施时把本文件里
+那段内嵌脚本提到 `tools/`，因为「照抄进 workflow」会产生第二份，而抓不一致的脚本
+自己有第二份就是漏洞；`the_ci_workflow_covers_the_gates` 现在断言 `docs/README.md`
+不再内嵌它。套件由 96 增至 97。runner 选 26.04 而非 `latest`，是因为
+`ubuntu-latest` 到 2026-11-19 仍指向 24.04。
+
+CI 落地前实测过一件事：套件唯一的外部输入是 `tz::today()`，而 runner 是 UTC。实测
+`TZ=UTC` / `America/Los_Angeles` / `Asia/Shanghai` / `Pacific/Kiritimati` 下均
+96 passed，故 CI 不设 `TZ` 也不会有隐藏的时区依赖。
 
 计划 08 由 2026-09-28 接入黄历时发现并已实施：`date -a` 的 `干支` 行印的月柱，
 与同一份输出里 `宜` / `忌` 所依据的月柱，是两个不同基准（1–9999 共 119,988 天）。

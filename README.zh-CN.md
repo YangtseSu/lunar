@@ -2,6 +2,10 @@
 
 [English](README.md) | 简体中文
 
+[![CI](https://github.com/YangtseSu/lunar/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/YangtseSu/lunar/actions/workflows/ci.yml)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
+[![Rust 2024](https://img.shields.io/badge/Rust-2024-2b866d?logo=rust)](https://www.rust-lang.org)
+
 [`lunar-rs`](https://crates.io/crates/lunar-rs)（纯 Rust 实现的寿星天文历引擎）的命令行
 包装器。它提供三个子命令——两个照着它们各自对标的 Unix 工具设计，另一个是那些工具没有
 对应物的：

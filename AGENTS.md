@@ -347,7 +347,9 @@ locale is set: the tool speaks Simplified Chinese unconditionally.
 - **The READMEs' `console` blocks are executable samples.** Every `$ lunar …`
   line in `README.md` *and* `README.zh-CN.md` must reproduce byte-for-byte;
   re-verify after any behaviour change. The translation is a copy, so it
-  rots the moment one of them is edited and the other is not.
+  rots the moment one of them is edited and the other is not. The check is
+  `python3 tools/check_samples.py`, which CI runs on every push — locally it
+  is still a gate, because the run has not happened yet.
 - **The reference day is not a testable input.** `tz::today()` is the only
   source; pin the *mechanism* instead, as
   `the_statutory_calendar_and_the_reference_day_compose` does (a combined run
@@ -375,8 +377,14 @@ cargo clippy --all-targets   # required: zero warnings
 ```
 
 Rust 2024 edition, distro `rust` (no `rust-toolchain.toml`), plain `cargo`, no
-workspace, `Cargo.lock` tracked, `target/` ignored. There is no CI: the gates
-above are local, and nothing is "done" until they pass.
+workspace, `Cargo.lock` tracked, `target/` ignored. The three gates above are
+also CI's, on `ubuntu-26.04`, and nothing is "done" until they pass — locally
+or on the run.
+
+`tools/check_samples.py` is the fourth check: it runs every `$ lunar …` line
+in both READMEs' `console` blocks against the binary and exits non-zero on a
+single mismatched byte. It is stdlib Python 3 with no dependencies, and CI
+runs it as written rather than carrying a copy.
 
 ## Commit Discipline
 

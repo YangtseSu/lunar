@@ -3403,3 +3403,51 @@ fn the_chinese_readme_stays_a_translation() {
         "the Chinese README does not link back"
     );
 }
+
+/// CI is what makes "the gates pass" mean something on a machine that is not
+/// the author's, so the workflow is a contract like any other: the three
+/// gates have to be in it, on the runner the repo names, and the sample
+/// checker has to be the committed script rather than a copy of it — a copy
+/// is the one thing that can drift without failing.
+#[test]
+fn the_ci_workflow_covers_the_gates() {
+    let workflow = include_str!("../.github/workflows/ci.yml");
+    for gate in [
+        "cargo fmt --all -- --check",
+        "cargo clippy --all-targets",
+        "cargo test",
+    ] {
+        assert!(workflow.contains(gate), "CI does not run `{gate}`");
+    }
+    assert!(
+        workflow.contains("ubuntu-26.04"),
+        "CI does not pin the ubuntu-26.04 runner"
+    );
+    assert!(
+        workflow.contains("actions/cache@"),
+        "CI caches nothing, so every run rebuilds the world"
+    );
+    assert!(
+        workflow.contains("tools/check_samples.py"),
+        "CI must run the committed sample checker, not a copy of it"
+    );
+
+    // The checker has to exist, and it has to be the only copy: `docs/README.md`
+    // used to embed the same script inline, and two copies of the one thing
+    // whose job is catching drift is how a drift gets through.
+    let checker = include_str!("../tools/check_samples.py");
+    assert!(
+        checker.contains("README.zh-CN.md") && checker.contains("README.md"),
+        "the checker only reads one of the two documents"
+    );
+    let docs = include_str!("../docs/README.md");
+    assert!(
+        !docs.contains("import re, subprocess"),
+        "docs/README.md embeds a second copy of the sample checker"
+    );
+    assert!(
+        !docs.contains("There is no CI")
+            && !include_str!("../AGENTS.md").contains("There is no CI"),
+        "a document still claims the repository has no CI"
+    );
+}

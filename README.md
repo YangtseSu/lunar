@@ -2,6 +2,10 @@
 
 English | [简体中文](README.zh-CN.md)
 
+[![CI](https://github.com/YangtseSu/lunar/actions/workflows/ci.yml/badge.svg?branch=master)](https://github.com/YangtseSu/lunar/actions/workflows/ci.yml)
+[![License: GPL-3.0-or-later](https://img.shields.io/badge/license-GPL--3.0--or--later-blue)](LICENSE)
+[![Rust 2024](https://img.shields.io/badge/Rust-2024-2b866d?logo=rust)](https://www.rust-lang.org)
+
 A command-line wrapper around [`lunar-rs`](https://crates.io/crates/lunar-rs), the
 pure-Rust 寿星天文历 engine. It exposes three subcommands — two modelled on the
 Unix tools they are named after, and one the tools have no counterpart for:
