@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 //! Civil (proleptic Gregorian) date arithmetic for grid construction and
 //! `-d` parsing.
 //!

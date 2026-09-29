@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 //! `lunar bazi` — the four pillars of a birth moment.
 //!
 //! 八字 is a birth *chart*, not a day's profile: one of its four pillars is

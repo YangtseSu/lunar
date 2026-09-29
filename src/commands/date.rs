@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 //! `lunar date` — one day's Chinese almanac profile.
 //!
 //! Without `-f` it prints the standard day profile:

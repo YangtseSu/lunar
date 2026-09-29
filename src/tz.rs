@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 //! Local civil date resolution.
 //!
 //! A calendar CLI only ever needs "what day is it here", so this is the whole

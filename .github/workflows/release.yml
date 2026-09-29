@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+#
+# SPDX-License-Identifier: GPL-3.0-or-later
+
 name: release
 
 # A tag is a release. `v0.1.0` is cut from `Cargo.toml`'s version, which clap

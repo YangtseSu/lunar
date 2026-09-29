@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 //! Layout and behaviour, pinned to what the tool documents; calendar values,
 //! pinned to what `lunar-rs` computes from astronomy.
 //!

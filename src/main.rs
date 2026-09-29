@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 //! `lunar` — a Chinese lunisolar calendar command line tool.
 //!
 //! Three subcommands, all powered by the `lunar-rs` calendar engine:

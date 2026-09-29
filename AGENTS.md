@@ -383,15 +383,17 @@ CI's, on `ubuntu-26.04`, and nothing is "done" until they pass — locally or on
 the run.
 
 `reuse lint` is the fifth check, and it runs in CI as its own `reuse` job on
-`ubuntu-26.04`, installed from the runner's universe repository. It is worth
-knowing why licensing is declared in `REUSE.toml` instead of in 41 file headers,
-because the obvious shape is the one that does not work here: `reuse` decides
-whether a file is text by guessing the encoding of its **first 2048 bytes**, and
-on the CJK-heavy Markdown in this repository that guess returns no match. The
-file is then read as binary, its header is never looked at, and `reuse lint`
-reports it unlicensed whatever the header says. An in-file header is therefore
-not evidence of anything here — the annotation is. `REUSE.toml` uses
-`precedence = "aggregate"`, so a header that is added later still counts.
+`ubuntu-26.04`, installed from the runner's universe repository. Every `.rs`,
+`.py`, `.toml`, `.yml` and `Cargo.lock` carries its own `//` / `#` SPDX header,
+which is the shape a reader expects. The Markdown does not, and the reason is
+a tooling defect rather than a convention: `reuse` decides whether a file is
+text by guessing the encoding of its **first 2048 bytes**, and on the
+CJK-heavy documents here that guess returns no match. The file is then read as
+binary, a header in it is never looked at, and `reuse lint` reports it
+unlicensed whatever the header says — `docs/parity.md` and `README.zh-CN.md`
+among them. So those are declared in `REUSE.toml`, whose `path = "**"` also
+covers any Markdown added later, with `precedence = "aggregate"` so the
+in-file headers stay additive and nothing is overridden.
 `LICENSES/GPL-3.0-or-later.txt` is a symlink to the root `LICENSE`, which stays
 where it is: `LICENSE` is the name the README, the release archive and every
 distributor look for.

@@ -1,3 +1,7 @@
+// SPDX-FileCopyrightText: 2026 Yangtse Su <yangtsesu@gmail.com>
+//
+// SPDX-License-Identifier: GPL-3.0-or-later
+
 //! Cell decoration: the reference day, the statutory calendar, and colour.
 //!
 //! A `cal` cell carries two independent marks, and **they compose**:

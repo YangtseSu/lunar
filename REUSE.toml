@@ -3,17 +3,19 @@ SPDX-PackageName = "lunar"
 SPDX-PackageSupplier = "Yangtse Su <yangtsesu@gmail.com>"
 SPDX-PackageDownloadLocation = "https://github.com/YangtseSu/lunar"
 
-# The holder and the license are the same in every file, so they are declared
-# once here instead of being repeated in 41 headers. Per-file headers are the
-# REUSE tool's own default, and they are the wrong shape for this repository:
-# `reuse` decides whether a file is text by guessing the encoding of its first
-# 2048 bytes, and on the CJK-heavy Markdown here that guess returns no match.
-# The file is then treated as binary, its header is never read, and `reuse
-# lint` reports it as unlicensed no matter what the header says. The licence
-# has to live outside the files for that reason, not only for brevity.
+# The Markdown here carries its copyright and licence in this file rather than
+# in its own header, and not for brevity: `reuse` decides whether a file is
+# text by guessing the encoding of its first 2048 bytes, and on the
+# CJK-heavy documents below that guess returns no match. The file is then read
+# as binary, a header in it is never examined, and `reuse lint` reports it
+# unlicensed whatever the header says — `docs/parity.md` and
+# `README.zh-CN.md` among them. The wildcard below covers them anyway, so this
+# also holds for a Markdown file added later.
 #
-# `precedence = "aggregate"` means a file's own header still counts, so
-# in-file SPDX tags are additive here and nothing is silently overridden.
+# The code and configuration files do carry their own `//` / `#` headers,
+# which is the REUSE tool's own default and the shape a reader expects. The
+# annotation here is additive to those rather than a substitute for them,
+# because `precedence = "aggregate"`.
 [[annotations]]
 path = "**"
 precedence = "aggregate"
