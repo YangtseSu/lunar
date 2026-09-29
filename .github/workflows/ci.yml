@@ -80,3 +80,22 @@ jobs:
 
       - name: Check both READMEs
         run: python3 tools/check_samples.py
+
+  # Copyright and licensing are declared once, in `REUSE.toml`, rather than in
+  # 41 file headers — the reason is in that file, and it is a tooling defect
+  # rather than a preference. This job is what keeps the declaration honest: a
+  # new file, or a dropped annotation, fails here instead of shipping
+  # unlicensed. `reuse` comes from the runner's own universe repository, so the
+  # check is the distribution's tool and not a version pinned by this repo.
+  reuse:
+    name: REUSE compliance
+    runs-on: ubuntu-26.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Install reuse
+        run: sudo apt-get update -qq && sudo apt-get install -y reuse
+
+      - name: Lint
+        run: reuse lint

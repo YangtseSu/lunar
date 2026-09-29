@@ -374,14 +374,29 @@ cargo run -- date -d 2026-09-07
 cargo test                   # the integration suite
 cargo fmt                    # required: `cargo fmt --check` must be clean
 cargo clippy --all-targets   # required: zero warnings
+reuse lint                   # required: every file carries copyright + license
 ```
 
 Rust 2024 edition, distro `rust` (no `rust-toolchain.toml`), plain `cargo`, no
-workspace, `Cargo.lock` tracked, `target/` ignored. The three gates above are
-also CI's, on `ubuntu-26.04`, and nothing is "done" until they pass — locally
-or on the run.
+workspace, `Cargo.lock` tracked, `target/` ignored. Every gate above is also
+CI's, on `ubuntu-26.04`, and nothing is "done" until they pass — locally or on
+the run.
 
-`tools/check_samples.py` is the fourth check: it runs every `$ lunar …` line
+`reuse lint` is the fifth check, and it runs in CI as its own `reuse` job on
+`ubuntu-26.04`, installed from the runner's universe repository. It is worth
+knowing why licensing is declared in `REUSE.toml` instead of in 41 file headers,
+because the obvious shape is the one that does not work here: `reuse` decides
+whether a file is text by guessing the encoding of its **first 2048 bytes**, and
+on the CJK-heavy Markdown in this repository that guess returns no match. The
+file is then read as binary, its header is never looked at, and `reuse lint`
+reports it unlicensed whatever the header says. An in-file header is therefore
+not evidence of anything here — the annotation is. `REUSE.toml` uses
+`precedence = "aggregate"`, so a header that is added later still counts.
+`LICENSES/GPL-3.0-or-later.txt` is a symlink to the root `LICENSE`, which stays
+where it is: `LICENSE` is the name the README, the release archive and every
+distributor look for.
+
+`tools/check_samples.py` is the sixth check: it runs every `$ lunar …` line
 in both READMEs' `console` blocks against the binary and exits non-zero on a
 single mismatched byte. It is stdlib Python 3 with no dependencies, and CI
 runs it as written rather than carrying a copy.

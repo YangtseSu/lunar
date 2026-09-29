@@ -696,3 +696,7 @@ cargo clippy --all-targets
 ## 许可证
 
 GPL-3.0-or-later。见 [LICENSE](LICENSE)。
+
+本项目符合 [REUSE](https://reuse.software) 规范：版权与许可集中声明在
+[`REUSE.toml`](REUSE.toml) 一处，`LICENSES/GPL-3.0-or-later.txt` 链向上面的
+`LICENSE`。新增文件已被该声明覆盖。

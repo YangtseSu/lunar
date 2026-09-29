@@ -1,0 +1,21 @@
+version = 1
+SPDX-PackageName = "lunar"
+SPDX-PackageSupplier = "Yangtse Su <yangtsesu@gmail.com>"
+SPDX-PackageDownloadLocation = "https://github.com/YangtseSu/lunar"
+
+# The holder and the license are the same in every file, so they are declared
+# once here instead of being repeated in 41 headers. Per-file headers are the
+# REUSE tool's own default, and they are the wrong shape for this repository:
+# `reuse` decides whether a file is text by guessing the encoding of its first
+# 2048 bytes, and on the CJK-heavy Markdown here that guess returns no match.
+# The file is then treated as binary, its header is never read, and `reuse
+# lint` reports it as unlicensed no matter what the header says. The licence
+# has to live outside the files for that reason, not only for brevity.
+#
+# `precedence = "aggregate"` means a file's own header still counts, so
+# in-file SPDX tags are additive here and nothing is silently overridden.
+[[annotations]]
+path = "**"
+precedence = "aggregate"
+SPDX-FileCopyrightText = "2026 Yangtse Su <yangtsesu@gmail.com>"
+SPDX-License-Identifier = "GPL-3.0-or-later"

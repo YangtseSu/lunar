@@ -3405,10 +3405,10 @@ fn the_chinese_readme_stays_a_translation() {
 }
 
 /// CI is what makes "the gates pass" mean something on a machine that is not
-/// the author's, so the workflow is a contract like any other: the three
-/// gates have to be in it, on the runner the repo names, and the sample
-/// checker has to be the committed script rather than a copy of it — a copy
-/// is the one thing that can drift without failing.
+/// the author's, so the workflow is a contract like any other: the gates have
+/// to be in it, on the runner the repo names, and the sample checker has to be
+/// the committed script rather than a copy of it — a copy is the one thing
+/// that can drift without failing.
 #[test]
 fn the_ci_workflow_covers_the_gates() {
     let workflow = include_str!("../.github/workflows/ci.yml");
@@ -3416,6 +3416,7 @@ fn the_ci_workflow_covers_the_gates() {
         "cargo fmt --all -- --check",
         "cargo clippy --all-targets",
         "cargo test",
+        "reuse lint",
     ] {
         assert!(workflow.contains(gate), "CI does not run `{gate}`");
     }

@@ -767,3 +767,8 @@ has to argue with them rather than quietly break them.
 ## License
 
 GPL-3.0-or-later. See [LICENSE](LICENSE).
+
+The project is [REUSE](https://reuse.software)-compliant: the copyright and
+license are declared once, in [`REUSE.toml`](REUSE.toml), and
+`LICENSES/GPL-3.0-or-later.txt` links to the `LICENSE` above. If you add a file,
+the declaration already covers it.

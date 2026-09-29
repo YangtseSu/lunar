@@ -32,14 +32,18 @@ AI 读完该文件即可开工，不需要本目录之外的上下文。
    cargo test
    cargo fmt --check
    cargo clippy --all-targets
+   reuse lint
    ```
+
+   （`reuse lint` 只在新增或删除文件时需要跑；声明写在 `REUSE.toml`，日常改
+   代码不触碰它。理由见该文件注释。）
 
 6. **commit message**：祈使句主语，<72 字符，说行为不说文件；正文解释错在哪、
    为何重要、改了什么。风格参考 `git log`。
 7. **不得 `git push`**，除非用户明确指示。
 
 新增能力（引擎已实现、本仓库未暴露的子命令或输出面）**同样走本流程**：立案为
-`docs/plans/NN-*.md`，一个 commit 完成，同样受三个验收门约束。区别只在「归属」
+`docs/plans/NN-*.md`，一个 commit 完成，同样受上面那些验收门约束。区别只在「归属」
 与「现象」两节怎么写——新增能力没有 `date(1)` / `cal(1)` 作参照，因此：
 
 - **现象**写"能力缺失"而非"行为对不上"：引擎的哪个入口没被暴露、用户现在拿不到
@@ -135,7 +139,7 @@ CI 落地前实测过一件事：套件唯一的外部输入是 `tz::today()`，
 - 计划中的**复现命令**输出与"目标行为"一节描述一致（含退出码与 stderr）；
 - `tests/documented_examples.rs` 有测试覆盖该行为（既有测试断言需随语义更新）；
 - README / AGENTS.md 相关段落已同步，README console 块校验 `fails: 0`；
-- 三个验收门全绿；
+- 验收门全绿（新增/删除文件时另跑 `reuse lint`）；
 - AGENTS.md 的 Known Defects 中该条目已删除。
 
 **新增能力计划**额外要求：「现象」引用引擎实测值以证明能力齐备；「取舍」一节
@@ -169,3 +173,15 @@ CI 落地前实测过一件事：套件唯一的外部输入是 `tz::today()`，
 `bazi_prints_four_pillars_only_with_a_time` 失败时打印的 `left`（真实输出）逐行
 仍是拆分前那七行、顺序未变，这是"只搬移、没丢行"的证据；套件由 87 增至 89
 （新增两个测试），README console 校验 19 块 `fails: 0`。
+
+## 版权与许可：REUSE 兼容
+
+许可声明集中在 `REUSE.toml` 一处，`LICENSES/GPL-3.0-or-later.txt` 是指向根目录
+`LICENSE` 的符号链接（根 `LICENSE` 保留不动：README、发布包与发行版都按这个名字
+找）。`reuse lint` 是 CI 的第四个 job，装的是 runner universe 源里的 `reuse`。
+
+这里不用 41 个文件头是有原因的，不是图省事：`reuse` 靠**前 2048 字节**猜编码来
+判断文件是不是文本，本仓库中文密集的 Markdown 猜不出结果，于是被当作二进制、
+整个头被跳过，`reuse lint` 会报"未授权"——无论头里写了什么。所以文件头在这里
+不构成证据，声明写在文件外才作数。实测 5.0.2（Ubuntu 26.04 源）与 6.2.0 均
+`42 / 42` 通过。

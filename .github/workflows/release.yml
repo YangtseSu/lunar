@@ -80,7 +80,11 @@ jobs:
           NAME="lunar-${VERSION}-${{ matrix.arch }}"
           mkdir -p "dist/$NAME"
           cp "target/${{ matrix.target }}/release/lunar" "dist/$NAME/lunar"
-          cp README.md LICENSE "dist/$NAME/"
+          # `LICENSE` is the licence text and `REUSE.toml` the declaration
+          # covering it, so a consumer of the binary gets both and the archive
+          # is REUSE-compliant. `cp -r` keeps the LICENSES entry a symlink.
+          cp README.md LICENSE REUSE.toml "dist/$NAME/"
+          cp -r LICENSES "dist/$NAME/"
           tar -czf "dist/$NAME.tar.gz" -C dist "$NAME"
           rm -rf "dist/$NAME"
           ls -l "dist/$NAME.tar.gz"
